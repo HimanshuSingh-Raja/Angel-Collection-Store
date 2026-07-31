@@ -2,16 +2,16 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Lock, Mail, ArrowRight, KeyRound } from 'lucide-react';
+import { ShieldCheck, Mail, ArrowRight, KeyRound } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const { setRole } = useAuth();
 
-  // Pre-fill default master credentials so admin never has to re-type manually
-  const [email, setEmail] = useState('angelcollection2021@gmail.com');
-  const [password, setPassword] = useState('sukhii@2021');
+  // Always start with empty manual inputs
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -72,7 +72,7 @@ export default function AdminLoginPage() {
         )}
 
         {/* Login Form */}
-        <form onSubmit={handleLogin} className="space-y-4 text-xs">
+        <form onSubmit={handleLogin} className="space-y-4 text-xs" autoComplete="off">
           <div>
             <label className="font-bold text-neutral-400 uppercase block mb-1.5">Master Admin Email</label>
             <div className="relative">
@@ -80,9 +80,10 @@ export default function AdminLoginPage() {
               <input
                 type="email"
                 required
+                autoComplete="off"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="angelcollection2021@gmail.com"
+                placeholder="Enter Master Email"
                 className="w-full pl-10 pr-4 py-3 bg-[#0B0E14] text-white rounded-xl border border-[#202736] focus:outline-none focus:border-amber-500 font-sans min-h-[44px]"
               />
             </div>
@@ -95,6 +96,7 @@ export default function AdminLoginPage() {
               <input
                 type="password"
                 required
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
@@ -107,7 +109,7 @@ export default function AdminLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-4 min-h-[44px] bg-amber-500 text-neutral-950 rounded-2xl font-bold uppercase tracking-[0.15em] hover:bg-amber-400 transition flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 cursor-pointer"
+              className="w-full py-4 min-h-[44px] bg-amber-500 text-neutral-950 rounded-2xl font-bold uppercase tracking-[0.15em] hover:bg-amber-400 transition flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 cursor-pointer font-bold"
             >
               {loading ? (
                 <span>VERIFYING CREDENTIALS...</span>
@@ -122,7 +124,7 @@ export default function AdminLoginPage() {
         </form>
 
         <div className="text-center text-[10px] text-neutral-500 font-mono pt-4 border-t border-[#202736]">
-          Protected by Angel Security Protocol v1.0 • Master Owner Session
+          Protected by Angel Security Protocol v1.0 • Manual Master Credential Verification
         </div>
       </div>
     </div>
