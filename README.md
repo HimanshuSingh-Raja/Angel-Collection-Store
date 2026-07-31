@@ -92,22 +92,12 @@ AngelCollection/
 
 Create a `.env` file in the root directory and configure the following variables:
 
-```env
-# PostgreSQL Database Connection (Neon Cloud)
-DATABASE_URL="postgresql://user:password@ep-jolly-flower-azyoh0cd.ap-southeast-1.aws.neon.tech/angelcollection?sslmode=require"
-
-# Resend Email Service
-RESEND_API_KEY="re_123456789_abcdefghijklmnopqrstuvwxyz"
-RESEND_SENDER_EMAIL="onboarding@resend.dev"
-
-# Admin & Owner Credentials
-OWNER_EMAIL="angelcollection2021@gmail.com"
-OWNER_PASSWORD="your_secure_password"
-
-# Base Application URL
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
-```
-
+`DATABASE_URL=your_database_url
+RESEND_API_KEY=your_resend_api_key
+RESEND_SENDER_EMAIL=your_sender_email
+OWNER_EMAIL=your_admin_email
+OWNER_PASSWORD=your_admin_password
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 ---
 
 ## 🚀 Quick Start Guide
