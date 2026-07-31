@@ -3,13 +3,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ShoppingBag, Heart, Menu, X, Sparkles } from 'lucide-react';
+import { ShoppingBag, Heart, Menu, Sparkles } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { ProfileDropdown } from '@/components/navbar/ProfileDropdown';
 import { SearchBar } from '@/components/navbar/SearchBar';
 import { MegaMenu } from '@/components/navbar/MegaMenu';
 import { AngelLogo } from '@/components/common/AngelLogo';
+import { MobileNavDrawer } from './MobileNavDrawer';
 
 export const Header: React.FC = () => {
   const pathname = usePathname();
@@ -70,7 +71,7 @@ export const Header: React.FC = () => {
         {/* Mobile menu trigger */}
         <button
           onClick={() => setMobileMenuOpen(true)}
-          className="lg:hidden p-1.5 text-neutral-800 hover:text-black focus:outline-none"
+          className="lg:hidden p-2 min-h-[44px] min-w-[44px] text-neutral-800 hover:text-black focus:outline-none flex items-center justify-center cursor-pointer"
           aria-label="Open navigation menu"
         >
           <Menu className="w-6 h-6" />
@@ -89,7 +90,7 @@ export const Header: React.FC = () => {
           {/* Wishlist */}
           <Link
             href="/wishlist"
-            className="flex flex-col items-center justify-center text-neutral-700 hover:text-black transition group relative focus:outline-none"
+            className="flex flex-col items-center justify-center text-neutral-700 hover:text-black transition group relative focus:outline-none min-h-[44px]"
             aria-label="View Wishlist"
           >
             <div className="p-1.5 sm:p-2 rounded-full group-hover:bg-neutral-100/80 transition relative flex items-center justify-center">
@@ -111,7 +112,7 @@ export const Header: React.FC = () => {
           {/* Cart Icon Drawer Trigger */}
           <button
             onClick={() => setIsCartOpen(true)}
-            className="flex flex-col items-center justify-center group focus:outline-none"
+            className="flex flex-col items-center justify-center group focus:outline-none min-h-[44px] cursor-pointer"
             aria-label="Open Shopping Bag"
           >
             <div className="p-2 sm:p-2.5 rounded-full bg-neutral-900 text-white hover:bg-neutral-800 transition relative flex items-center justify-center shadow-md">
@@ -140,7 +141,7 @@ export const Header: React.FC = () => {
           <Link
             key={cat.name}
             href={cat.href}
-            className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 transition ${
+            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 transition min-h-[36px] flex items-center ${
               pathname === cat.href
                 ? 'bg-neutral-900 text-white'
                 : cat.isSale
@@ -217,43 +218,8 @@ export const Header: React.FC = () => {
         )}
       </div>
 
-      {/* MOBILE SIDEBAR MENU */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 flex">
-          <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-          <div className="relative bg-white w-4/5 max-w-sm h-full shadow-2xl p-6 flex flex-col justify-between overflow-y-auto">
-            <div>
-              <div className="flex items-center justify-between pb-6 border-b border-[#ECECEC]">
-                <AngelLogo variant="mobile" onClick={() => setMobileMenuOpen(false)} />
-                <button
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="p-1 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <nav className="mt-6 space-y-1">
-                {categories.map((cat) => (
-                  <Link
-                    key={cat.name}
-                    href={cat.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`block text-xs uppercase tracking-widest font-bold py-3 border-b border-[#ECECEC] ${
-                      cat.isSale ? 'text-rose-600' : cat.isFeatured ? 'text-amber-800' : 'text-neutral-800'
-                    }`}
-                  >
-                    {cat.name}
-                  </Link>
-                ))}
-              </nav>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* LUXURY REDESIGNED MOBILE NAVIGATION DRAWER */}
+      <MobileNavDrawer isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
     </header>
   );
 };
