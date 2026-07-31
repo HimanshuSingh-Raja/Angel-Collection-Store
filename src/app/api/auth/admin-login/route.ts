@@ -1,5 +1,35 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { db } from '@/lib/db';
+
+export async function GET() {
+  try {
+    const cookieStore = await cookies();
+    const adminSession = cookieStore.get('angel_admin_session')?.value;
+
+    if (!adminSession) {
+      return NextResponse.json({ authenticated: false }, { status: 401 });
+    }
+
+    if (adminSession === 'owner_master_session_authenticated_2026') {
+      return NextResponse.json({ authenticated: true, role: 'OWNER' });
+    }
+
+    // Extract user ID prefix if DB user session
+    const userId = adminSession.split('_')[0];
+    const user = await db.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (user && user.isActive && ['OWNER', 'ADMIN', 'MANAGER', 'STAFF'].includes(user.role)) {
+      return NextResponse.json({ authenticated: true, role: user.role });
+    }
+
+    return NextResponse.json({ authenticated: false }, { status: 401 });
+  } catch (error) {
+    return NextResponse.json({ authenticated: false }, { status: 500 });
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -23,7 +53,7 @@ export async function POST(request: Request) {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
-        maxAge: 60 * 60 * 24 * 7, // 7 days session
+        maxAge: 30 * 24 * 60 * 60, // Persistent 30-Day Session
       });
 
       return response;
@@ -48,7 +78,7 @@ export async function POST(request: Request) {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
-        maxAge: 60 * 60 * 24 * 7,
+        maxAge: 30 * 24 * 60 * 60, // Persistent 30-Day Session
       });
 
       return response;

@@ -1,17 +1,40 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Lock, Mail, ArrowRight, Sparkles, KeyRound } from 'lucide-react';
+import { ShieldCheck, Lock, Mail, ArrowRight, KeyRound, Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const { setRole } = useAuth();
+  const { role, setRole } = useAuth();
   const [email, setEmail] = useState('angelcollection2021@gmail.com');
   const [password, setPassword] = useState('sukhii@2021');
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState('');
+
+  // Check if admin is already logged in with valid session cookie
+  useEffect(() => {
+    async function checkExistingSession() {
+      try {
+        const res = await fetch('/api/auth/admin-login', { method: 'GET' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.authenticated) {
+            setRole(data.role || 'OWNER');
+            router.push('/admin');
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Session check warning:', err);
+      } finally {
+        setCheckingSession(false);
+      }
+    }
+    checkExistingSession();
+  }, [router, setRole]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,13 +63,22 @@ export default function AdminLoginPage() {
     }
   };
 
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen bg-[#0A0C10] text-white flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
+        <span className="text-xs text-neutral-400 font-mono">Verifying persistent admin session...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#0A0C10] text-white flex items-center justify-center p-4 font-sans relative overflow-hidden">
       {/* Background Subtle Gradient Blobs */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-amber-700/10 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="max-w-md w-full bg-[#121620] border border-[#202736] rounded-3xl p-8 shadow-2xl space-y-8 relative z-10 animate-slide-up">
+      <div className="max-w-md w-full bg-[#121620] border border-[#202736] rounded-3xl p-6 sm:p-8 shadow-2xl space-y-8 relative z-10 animate-slide-up">
         {/* Brand Header */}
         <div className="text-center space-y-2">
           <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto mb-3">
@@ -64,7 +96,7 @@ export default function AdminLoginPage() {
         </div>
 
         {error && (
-          <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs text-center font-medium">
+          <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs text-center font-medium">
             {error}
           </div>
         )}
@@ -81,7 +113,7 @@ export default function AdminLoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="angelcollection2021@gmail.com"
-                className="w-full pl-10 pr-4 py-3 bg-[#0B0E14] text-white rounded-xl border border-[#202736] focus:outline-none focus:border-amber-500 font-sans"
+                className="w-full pl-10 pr-4 py-3 bg-[#0B0E14] text-white rounded-xl border border-[#202736] focus:outline-none focus:border-amber-500 font-sans min-h-[44px]"
               />
             </div>
           </div>
@@ -96,7 +128,7 @@ export default function AdminLoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-3 bg-[#0B0E14] text-white rounded-xl border border-[#202736] focus:outline-none focus:border-amber-500 font-sans"
+                className="w-full pl-10 pr-4 py-3 bg-[#0B0E14] text-white rounded-xl border border-[#202736] focus:outline-none focus:border-amber-500 font-sans min-h-[44px]"
               />
             </div>
           </div>
@@ -105,10 +137,10 @@ export default function AdminLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-4 bg-amber-500 text-neutral-950 rounded-2xl font-bold uppercase tracking-[0.15em] hover:bg-amber-400 transition flex items-center justify-center gap-2 shadow-xl disabled:opacity-50"
+              className="w-full py-4 min-h-[44px] bg-amber-500 text-neutral-950 rounded-2xl font-bold uppercase tracking-[0.15em] hover:bg-amber-400 transition flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 cursor-pointer"
             >
               {loading ? (
-                <span>VERIFYING MASTER CREDENTIALS...</span>
+                <span>VERIFYING CREDENTIALS...</span>
               ) : (
                 <>
                   <span>ACCESS OWNER DASHBOARD</span>
@@ -120,7 +152,7 @@ export default function AdminLoginPage() {
         </form>
 
         <div className="text-center text-[10px] text-neutral-500 font-mono pt-4 border-t border-[#202736]">
-          Protected by Angel Security Protocol v1.0 • Master Owner Session
+          Protected by Angel Security Protocol v1.0 • 30-Day Session Persistence Active
         </div>
       </div>
     </div>

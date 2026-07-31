@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Heart, Eye, ShoppingBag, Star, Sparkles } from 'lucide-react';
 import { Product } from '@/types';
 import { useCart } from '@/context/CartContext';
@@ -43,12 +44,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
     >
       {/* Image Wrapper */}
       <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-100">
-        <Link href={`/product/${product.slug}`}>
-          <img
+        <Link href={`/product/${product.slug}`} className="block h-full w-full relative">
+          <Image
             src={isHovered ? secondaryImg : primaryImg}
             alt={product.title}
-            loading="lazy"
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className="h-full w-full object-cover object-center transition-transform duration-700 ease-out group-hover:scale-105"
+            unoptimized
           />
         </Link>
 
@@ -77,7 +80,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
             e.preventDefault();
             toggleWishlist(product);
           }}
-          className={`absolute top-2.5 right-2.5 z-10 p-2 sm:p-2.5 rounded-full transition-all duration-300 backdrop-blur-md ${
+          className={`absolute top-2.5 right-2.5 z-10 p-2 sm:p-2.5 rounded-full transition-all duration-300 backdrop-blur-md min-h-[44px] min-w-[44px] flex items-center justify-center ${
             inWishlist
               ? 'bg-rose-600 text-white shadow-lg'
               : 'bg-white/85 text-neutral-700 hover:bg-white hover:text-rose-600'
@@ -99,7 +102,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
                 e.preventDefault();
                 onQuickView(product);
               }}
-              className="flex-1 py-2.5 bg-white/90 backdrop-blur-md text-neutral-900 rounded-xl text-xs font-semibold hover:bg-white hover:text-black transition shadow-lg flex items-center justify-center gap-1.5"
+              className="flex-1 py-2.5 bg-white/90 backdrop-blur-md text-neutral-900 rounded-xl text-xs font-semibold hover:bg-white hover:text-black transition shadow-lg flex items-center justify-center gap-1.5 min-h-[44px]"
             >
               <Eye className="w-3.5 h-3.5" />
               <span>QUICK VIEW</span>
@@ -108,7 +111,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
 
           <button
             onClick={handleQuickAdd}
-            className="flex-1 py-2.5 bg-neutral-950 text-white rounded-xl text-xs font-semibold hover:bg-amber-600 hover:text-neutral-950 transition shadow-lg flex items-center justify-center gap-1.5"
+            className="flex-1 py-2.5 bg-neutral-950 text-white rounded-xl text-xs font-semibold hover:bg-amber-600 hover:text-neutral-950 transition shadow-lg flex items-center justify-center gap-1.5 min-h-[44px]"
           >
             <ShoppingBag className="w-3.5 h-3.5 text-amber-300" />
             <span>ADD TO CART</span>
@@ -151,9 +154,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
         {/* Mobile Touch Quick Add Button */}
         <button
           onClick={handleQuickAdd}
-          className="sm:hidden w-full mt-3 py-2 bg-neutral-950 text-white rounded-lg text-xs font-semibold hover:bg-neutral-800 transition flex items-center justify-center gap-1 cursor-pointer"
+          className="sm:hidden w-full mt-3 py-2.5 bg-neutral-950 text-white rounded-lg text-xs font-semibold hover:bg-neutral-800 transition flex items-center justify-center gap-1 cursor-pointer min-h-[44px]"
         >
-          <ShoppingBag className="w-3 h-3 text-amber-300" />
+          <ShoppingBag className="w-3.5 h-3.5 text-amber-300" />
           <span>ADD TO BAG</span>
         </button>
       </div>

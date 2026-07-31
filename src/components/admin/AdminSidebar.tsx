@@ -8,7 +8,7 @@ import {
   Package,
   ShoppingBag,
   FolderTree,
-  Image,
+  Image as ImageIcon,
   Ticket,
   Users,
   Settings,
@@ -17,10 +17,16 @@ import {
   Store,
   ChevronRight,
   LogOut,
+  X,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
-export const AdminSidebar: React.FC = () => {
+interface AdminSidebarProps {
+  isMobileOpen?: boolean;
+  onMobileClose?: () => void;
+}
+
+export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isMobileOpen, onMobileClose }) => {
   const pathname = usePathname();
   const router = useRouter();
   const { role, setRole, logout } = useAuth();
@@ -30,7 +36,7 @@ export const AdminSidebar: React.FC = () => {
     { name: 'Products', href: '/admin/products', icon: Package },
     { name: 'Orders', href: '/admin/orders', icon: ShoppingBag },
     { name: 'Categories', href: '/admin/categories', icon: FolderTree },
-    { name: 'Banners', href: '/admin/banners', icon: Image },
+    { name: 'Banners', href: '/admin/banners', icon: ImageIcon },
     { name: 'Coupons', href: '/admin/coupons', icon: Ticket },
     { name: 'Blogs & CMS', href: '/admin/blogs', icon: BookOpen },
     { name: 'Review Moderation', href: '/admin/reviews', icon: MessageSquare },
@@ -45,15 +51,16 @@ export const AdminSidebar: React.FC = () => {
       console.warn('Admin logout call error:', e);
     }
     logout();
+    if (onMobileClose) onMobileClose();
     router.push('/admin/login');
   };
 
-  return (
-    <aside className="w-64 bg-admin-bg text-admin-text border-r border-admin-border min-h-screen flex flex-col justify-between p-4 sticky top-0 h-screen overflow-y-auto">
+  const SidebarContent = (
+    <div className="flex flex-col justify-between h-full p-4 overflow-y-auto font-sans">
       <div>
         {/* Brand Header */}
         <div className="flex items-center justify-between pb-6 mb-6 border-b border-admin-border px-2">
-          <Link href="/admin" className="flex items-center space-x-2">
+          <Link href="/admin" onClick={onMobileClose} className="flex items-center space-x-2">
             <div className="w-8 h-8 rounded-lg bg-amber-500 text-neutral-950 flex items-center justify-center font-serif font-bold text-lg">
               A
             </div>
@@ -64,6 +71,15 @@ export const AdminSidebar: React.FC = () => {
               <span className="text-[10px] text-admin-muted font-mono block">Enterprise v1.0</span>
             </div>
           </Link>
+
+          {/* Close button on mobile drawer */}
+          <button
+            onClick={onMobileClose}
+            className="md:hidden p-2 text-neutral-400 hover:text-white rounded-lg"
+            aria-label="Close drawer"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Navigation Links */}
@@ -75,7 +91,8 @@ export const AdminSidebar: React.FC = () => {
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition ${
+                onClick={onMobileClose}
+                className={`flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-semibold tracking-wide transition min-h-[44px] ${
                   isActive
                     ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                     : 'text-admin-muted hover:text-white hover:bg-admin-card'
@@ -100,7 +117,7 @@ export const AdminSidebar: React.FC = () => {
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as any)}
-            className="w-full bg-admin-bg text-amber-300 text-xs font-bold py-1.5 px-2 rounded-lg border border-admin-border focus:outline-none focus:border-amber-500"
+            className="w-full bg-admin-bg text-amber-300 text-xs font-bold py-2 px-2 rounded-lg border border-admin-border focus:outline-none focus:border-amber-500 min-h-[40px]"
           >
             <option value="OWNER">Owner (Full Permissions)</option>
             <option value="ADMIN">Admin</option>
@@ -112,7 +129,8 @@ export const AdminSidebar: React.FC = () => {
 
         <Link
           href="/"
-          className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-neutral-900 text-neutral-300 text-xs font-semibold hover:bg-neutral-800 hover:text-white transition border border-neutral-800"
+          onClick={onMobileClose}
+          className="w-full flex items-center justify-center gap-2 py-3 px-3 rounded-xl bg-neutral-900 text-neutral-300 text-xs font-semibold hover:bg-neutral-800 hover:text-white transition border border-neutral-800 min-h-[44px]"
         >
           <Store className="w-4 h-4 text-amber-400" />
           <span>View Customer Store</span>
@@ -120,12 +138,36 @@ export const AdminSidebar: React.FC = () => {
 
         <button
           onClick={handleAdminLogout}
-          className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-rose-500/10 text-rose-400 text-xs font-semibold hover:bg-rose-500/20 transition border border-rose-500/20"
+          className="w-full flex items-center justify-center gap-2 py-3 px-3 rounded-xl bg-rose-500/10 text-rose-400 text-xs font-semibold hover:bg-rose-500/20 transition border border-rose-500/20 min-h-[44px] cursor-pointer"
         >
           <LogOut className="w-4 h-4" />
           <span>Logout Admin Session</span>
         </button>
       </div>
-    </aside>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop Fixed Sidebar */}
+      <aside className="hidden md:flex w-64 bg-admin-bg text-admin-text border-r border-admin-border sticky top-0 h-screen overflow-y-auto flex-col justify-between">
+        {SidebarContent}
+      </aside>
+
+      {/* Mobile Slide Drawer Overlay */}
+      {isMobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
+            onClick={onMobileClose}
+          />
+          {/* Drawer Content */}
+          <div className="relative w-72 max-w-[85vw] bg-admin-bg border-r border-admin-border h-full shadow-2xl z-50 animate-slide-right">
+            {SidebarContent}
+          </div>
+        </div>
+      )}
+    </>
   );
 };

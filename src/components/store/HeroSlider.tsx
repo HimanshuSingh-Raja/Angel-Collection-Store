@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, ArrowRight, Sparkles, ShoppingBag, Truck, Tag } from 'lucide-react';
 import { INITIAL_BANNERS } from '@/lib/mock-data';
@@ -116,10 +117,14 @@ export const HeroSlider: React.FC = () => {
             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
             className="absolute inset-0 w-full h-full"
           >
-            <img
+            <Image
               src={activeBanner.imageUrl}
               alt={activeBanner.title}
+              fill
+              priority
+              sizes="100vw"
               className="w-full h-full object-cover object-center sm:object-[center_top]"
+              unoptimized
             />
             {/* Soft Bottom Gradient Overlay for High Contrast Text Readability */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent z-10" />
@@ -156,14 +161,14 @@ export const HeroSlider: React.FC = () => {
           <div className="flex items-center gap-2.5 pt-1">
             <Link
               href={activeBanner.link || '/shop'}
-              className="h-11 px-6 bg-amber-400 text-neutral-950 text-xs font-bold tracking-widest uppercase rounded-full hover:bg-white transition duration-200 flex items-center justify-center gap-1.5 shadow-lg shadow-amber-400/10 cursor-pointer"
+              className="h-11 min-h-[44px] px-6 bg-amber-400 text-neutral-950 text-xs font-bold tracking-widest uppercase rounded-full hover:bg-white transition duration-200 flex items-center justify-center gap-1.5 shadow-lg shadow-amber-400/10 cursor-pointer"
             >
               <span>SHOP NOW</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
             <Link
               href="/shop?collection=new-arrivals"
-              className="h-11 px-6 bg-white/15 border border-white/30 text-white text-xs font-bold tracking-widest uppercase rounded-full hover:bg-white/30 transition duration-200 backdrop-blur-md flex items-center justify-center cursor-pointer"
+              className="h-11 min-h-[44px] px-6 bg-white/15 border border-white/30 text-white text-xs font-bold tracking-widest uppercase rounded-full hover:bg-white/30 transition duration-200 backdrop-blur-md flex items-center justify-center cursor-pointer"
             >
               EXPLORE
             </Link>
@@ -182,14 +187,14 @@ export const HeroSlider: React.FC = () => {
         {/* Previous / Next Desktop Navigation Arrows */}
         <button
           onClick={prevSlide}
-          className="hidden sm:flex absolute left-4 top-1/2 -translate-y-1/2 z-30 p-2.5 rounded-full bg-black/40 text-white hover:bg-amber-400 hover:text-neutral-950 transition backdrop-blur-md border border-white/20 cursor-pointer"
+          className="hidden sm:flex absolute left-4 top-1/2 -translate-y-1/2 z-30 p-2.5 rounded-full bg-black/40 text-white hover:bg-amber-400 hover:text-neutral-950 transition backdrop-blur-md border border-white/20 cursor-pointer min-h-[44px] min-w-[44px] items-center justify-center"
           aria-label="Previous Slide"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
         <button
           onClick={nextSlide}
-          className="hidden sm:flex absolute right-4 top-1/2 -translate-y-1/2 z-30 p-2.5 rounded-full bg-black/40 text-white hover:bg-amber-400 hover:text-neutral-950 transition backdrop-blur-md border border-white/20 cursor-pointer"
+          className="hidden sm:flex absolute right-4 top-1/2 -translate-y-1/2 z-30 p-2.5 rounded-full bg-black/40 text-white hover:bg-amber-400 hover:text-neutral-950 transition backdrop-blur-md border border-white/20 cursor-pointer min-h-[44px] min-w-[44px] items-center justify-center"
           aria-label="Next Slide"
         >
           <ChevronRight className="w-5 h-5" />
@@ -217,7 +222,7 @@ export const HeroSlider: React.FC = () => {
             <Link
               key={cat.name}
               href={cat.href}
-              className="px-3 py-2 rounded-xl bg-white border border-neutral-200/80 shadow-xs hover:border-amber-600 transition flex items-center gap-1.5 shrink-0 group"
+              className="px-3 py-2.5 rounded-xl bg-white border border-neutral-200/80 shadow-xs hover:border-amber-600 transition flex items-center gap-1.5 shrink-0 group min-h-[44px]"
             >
               <span className="text-sm">{cat.icon}</span>
               <span className="text-[11px] font-bold text-neutral-800 group-hover:text-amber-800 uppercase tracking-wider">
@@ -236,7 +241,7 @@ export const HeroSlider: React.FC = () => {
             <Link
               key={card.title}
               href={card.link}
-              className={`p-3.5 sm:p-5 rounded-2xl ${card.bg} border border-neutral-800 shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col justify-between space-y-2 group`}
+              className={`p-3.5 sm:p-5 rounded-2xl ${card.bg} border border-neutral-800 shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col justify-between space-y-2 group min-h-[120px]`}
             >
               <div className="flex items-center justify-between">
                 <span className={`px-2 py-0.5 rounded text-[8px] sm:text-[9px] font-bold uppercase tracking-widest border ${card.badgeColor}`}>
