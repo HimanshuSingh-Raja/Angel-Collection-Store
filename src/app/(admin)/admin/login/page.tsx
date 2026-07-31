@@ -1,40 +1,19 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Lock, Mail, ArrowRight, KeyRound, Loader2 } from 'lucide-react';
+import { ShieldCheck, Lock, Mail, ArrowRight, KeyRound } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const { role, setRole } = useAuth();
+  const { setRole } = useAuth();
+
+  // Pre-fill default master credentials so admin never has to re-type manually
   const [email, setEmail] = useState('angelcollection2021@gmail.com');
   const [password, setPassword] = useState('sukhii@2021');
   const [loading, setLoading] = useState(false);
-  const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState('');
-
-  // Check if admin is already logged in with valid session cookie
-  useEffect(() => {
-    async function checkExistingSession() {
-      try {
-        const res = await fetch('/api/auth/admin-login', { method: 'GET' });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.authenticated) {
-            setRole(data.role || 'OWNER');
-            router.push('/admin');
-            return;
-          }
-        }
-      } catch (err) {
-        console.warn('Session check warning:', err);
-      } finally {
-        setCheckingSession(false);
-      }
-    }
-    checkExistingSession();
-  }, [router, setRole]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,15 +41,6 @@ export default function AdminLoginPage() {
       setLoading(false);
     }
   };
-
-  if (checkingSession) {
-    return (
-      <div className="min-h-screen bg-[#0A0C10] text-white flex flex-col items-center justify-center space-y-4">
-        <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
-        <span className="text-xs text-neutral-400 font-mono">Verifying persistent admin session...</span>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#0A0C10] text-white flex items-center justify-center p-4 font-sans relative overflow-hidden">
@@ -152,7 +122,7 @@ export default function AdminLoginPage() {
         </form>
 
         <div className="text-center text-[10px] text-neutral-500 font-mono pt-4 border-t border-[#202736]">
-          Protected by Angel Security Protocol v1.0 • 30-Day Session Persistence Active
+          Protected by Angel Security Protocol v1.0 • Master Owner Session
         </div>
       </div>
     </div>
