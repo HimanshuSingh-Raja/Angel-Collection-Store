@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { verifyAdminSessionToken } from '@/lib/auth';
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -7,7 +8,8 @@ export function middleware(request: NextRequest) {
   // Intercept all /admin routes except /admin/login
   if (pathname.startsWith('/admin') && pathname !== '/admin/login') {
     const adminToken = request.cookies.get('angel_admin_session')?.value;
-    if (!adminToken) {
+    const { valid } = verifyAdminSessionToken(adminToken || '');
+    if (!valid) {
       const loginUrl = new URL('/admin/login', request.url);
       return NextResponse.redirect(loginUrl);
     }

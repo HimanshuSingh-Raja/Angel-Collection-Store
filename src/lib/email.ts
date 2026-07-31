@@ -5,7 +5,7 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const SENDER_EMAIL = process.env.RESEND_SENDER_EMAIL || 'onboarding@resend.dev';
 const SUPPORT_EMAIL = 'angelcollections.b4u@gmail.com';
-const ADMIN_EMAIL = process.env.OWNER_EMAIL || 'angelcollection2021@gmail.com';
+const ADMIN_EMAIL = process.env.OWNER_EMAIL || '';
 
 async function sendResendHttpRequest(payload: { from: string; to: string[]; subject: string; html: string }) {
   console.log(`\n📨 [RESEND SERVICE] Initiating Email Request to: ${payload.to.join(', ')}`);
@@ -335,6 +335,11 @@ export async function sendAdminOrderNotificationEmail(orderDetails: {
   customerEmail: string;
   total: number;
 }) {
+  if (!ADMIN_EMAIL) {
+    console.warn('⚠️ [RESEND SERVICE] ADMIN_EMAIL is missing from environment. Skipping admin alert email.');
+    return { success: true, skipped: true };
+  }
+
   return sendResendHttpRequest({
     from: SENDER_EMAIL,
     to: [ADMIN_EMAIL],

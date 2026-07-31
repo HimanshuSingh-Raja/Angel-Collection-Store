@@ -2,7 +2,45 @@ import { NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { db } from '@/lib/db';
+
+export function generateAdminSessionToken(userId: string, role: string): string {
+  const secret = process.env.ADMIN_SECRET_KEY || process.env.NEXTAUTH_SECRET || 'angel-secure-crypto-fallback-key-2026';
+  const timestamp = Date.now().toString();
+  const payload = `${userId}:${role}:${timestamp}`;
+  const hmac = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+  return `${payload}:${hmac}`;
+}
+
+export function verifyAdminSessionToken(token: string): { valid: boolean; userId?: string; role?: string } {
+  if (!token) return { valid: false };
+  try {
+    const parts = token.split(':');
+    if (parts.length !== 4) return { valid: false };
+    const [userId, role, timestampStr, receivedHmac] = parts;
+    const secret = process.env.ADMIN_SECRET_KEY || process.env.NEXTAUTH_SECRET || 'angel-secure-crypto-fallback-key-2026';
+
+    const payload = `${userId}:${role}:${timestampStr}`;
+    const expectedHmac = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+
+    const isValid = crypto.timingSafeEqual(
+      Buffer.from(receivedHmac, 'utf-8'),
+      Buffer.from(expectedHmac, 'utf-8')
+    );
+
+    if (!isValid) return { valid: false };
+
+    // Max 30-day session age check
+    const timestamp = parseInt(timestampStr, 10);
+    const maxAgeMs = 30 * 24 * 60 * 60 * 1000;
+    if (Date.now() - timestamp > maxAgeMs) return { valid: false };
+
+    return { valid: true, userId, role };
+  } catch {
+    return { valid: false };
+  }
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -85,5 +123,5 @@ export const authOptions: NextAuthOptions = {
     signIn: '/login',
     error: '/login',
   },
-  secret: process.env.NEXTAUTH_SECRET || 'angel-collection-super-secret-production-key-2026',
+  secret: process.env.NEXTAUTH_SECRET || 'angel-collection-production-secret-key-2026',
 };

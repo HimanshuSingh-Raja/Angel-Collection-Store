@@ -1,28 +1,21 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { db } from '@/lib/db';
+import { generateAdminSessionToken, verifyAdminSessionToken } from '@/lib/auth';
 
 export async function GET() {
   try {
     const cookieStore = await cookies();
-    const adminSession = cookieStore.get('angel_admin_session')?.value;
+    const adminToken = cookieStore.get('angel_admin_session')?.value;
 
-    if (!adminSession) {
+    if (!adminToken) {
       return NextResponse.json({ authenticated: false }, { status: 401 });
     }
 
-    if (adminSession === 'owner_master_session_authenticated_2026') {
-      return NextResponse.json({ authenticated: true, role: 'OWNER' });
-    }
+    const { valid, role } = verifyAdminSessionToken(adminToken);
 
-    // Extract user ID prefix if DB user session
-    const userId = adminSession.split('_')[0];
-    const user = await db.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (user && user.isActive && ['OWNER', 'ADMIN', 'MANAGER', 'STAFF'].includes(user.role)) {
-      return NextResponse.json({ authenticated: true, role: user.role });
+    if (valid) {
+      return NextResponse.json({ authenticated: true, role });
     }
 
     return NextResponse.json({ authenticated: false }, { status: 401 });
@@ -35,25 +28,35 @@ export async function POST(request: Request) {
   try {
     const { email, password } = await request.json();
 
-    const ownerEmail = process.env.OWNER_EMAIL || 'angelcollection2021@gmail.com';
-    const ownerPass = process.env.OWNER_PASSWORD || 'sukhii@2021';
+    const ownerEmail = process.env.OWNER_EMAIL;
+    const ownerPass = process.env.OWNER_PASSWORD;
 
-    // 1. Authenticate Master Admin using environment variables
+    if (!ownerEmail || !ownerPass) {
+      console.error('❌ [SECURITY ERROR] Missing OWNER_EMAIL or OWNER_PASSWORD environment variables.');
+      return NextResponse.json(
+        { success: false, message: 'Server configuration error. Contact system administrator.' },
+        { status: 500 }
+      );
+    }
+
+    // 1. Authenticate Master Admin strictly using environment variables
     if (email.toLowerCase() === ownerEmail.toLowerCase() && password === ownerPass) {
+      const sessionToken = generateAdminSessionToken('owner_master', 'OWNER');
+
       const response = NextResponse.json({
         success: true,
-        message: 'Owner Master Admin Authenticated',
+        message: 'Master Admin Authenticated',
         role: 'OWNER',
       });
 
       response.cookies.set({
         name: 'angel_admin_session',
-        value: 'owner_master_session_authenticated_2026',
+        value: sessionToken,
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
-        maxAge: 30 * 24 * 60 * 60, // Persistent 30-Day Session
+        maxAge: 30 * 24 * 60 * 60, // Cryptographically Secure 30-Day Session
       });
 
       return response;
@@ -65,6 +68,8 @@ export async function POST(request: Request) {
     });
 
     if (user && user.isActive && ['OWNER', 'ADMIN', 'MANAGER', 'STAFF'].includes(user.role)) {
+      const sessionToken = generateAdminSessionToken(user.id, user.role);
+
       const response = NextResponse.json({
         success: true,
         message: 'Admin Authenticated',
@@ -73,19 +78,19 @@ export async function POST(request: Request) {
 
       response.cookies.set({
         name: 'angel_admin_session',
-        value: `${user.id}_session_authenticated`,
+        value: sessionToken,
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
-        maxAge: 30 * 24 * 60 * 60, // Persistent 30-Day Session
+        maxAge: 30 * 24 * 60 * 60,
       });
 
       return response;
     }
 
     return NextResponse.json(
-      { success: false, message: 'Invalid Master Admin credentials.' },
+      { success: false, message: 'Invalid Admin credentials.' },
       { status: 401 }
     );
   } catch (error) {
