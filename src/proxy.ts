@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { verifyAdminSessionTokenEdge } from '@/lib/auth-token';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Intercept all /admin routes except /admin/login
@@ -33,6 +33,9 @@ export function middleware(request: NextRequest) {
 
   return NextResponse.next();
 }
+
+// Keep export middleware for backward compatibility if needed by older Next.js loaders
+export const middleware = proxy;
 
 export const config = {
   matcher: ['/admin/:path*', '/checkout/:path*', '/payment/:path*', '/orders/:path*', '/account/:path*'],
