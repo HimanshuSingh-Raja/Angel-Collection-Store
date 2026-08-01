@@ -17,6 +17,11 @@ const googleProvider = new GoogleAuthProvider();
 
 export function formatFirebaseErrorMessage(code: string): string {
   switch (code) {
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return 'Google sign-in popup was closed or cancelled. Please try again.';
+    case 'auth/unauthorized-domain':
+      return 'Domain authorization required: Please add this Vercel domain to Firebase Console > Authentication > Settings > Authorized Domains.';
     case 'auth/email-already-in-use':
       return 'An account with this email address already exists. Please log in instead.';
     case 'auth/invalid-email':

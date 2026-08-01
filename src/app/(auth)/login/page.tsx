@@ -63,7 +63,7 @@ export default function LoginPage() {
       }
     } catch (e: any) {
       console.error('Google Sign In Error:', e);
-      setServerError('Google authentication was cancelled or failed.');
+      setServerError(e?.message || 'Google authentication failed. Please try again.');
     } finally {
       setLoading(false);
     }
