@@ -1,29 +1,80 @@
 /**
- * Lightweight, Edge-compatible token verification helper for Next.js Middleware.
- * Does NOT import Node.js 'crypto' or Prisma 'db' to ensure 100% Edge Runtime compatibility.
+ * Edge-compatible authentication & token verification module.
+ * Uses W3C Web Crypto API (crypto.subtle) available in Edge Runtime & browsers.
+ * NO Node.js modules ('crypto', 'fs', 'path') or 'bcryptjs' or Prisma 'db' are imported.
  */
 
-export function verifyAdminSessionTokenEdge(token: string): { valid: boolean; userId?: string; role?: string } {
+export async function verifyAdminSessionTokenEdge(token: string): Promise<{ valid: boolean; userId?: string; role?: string }> {
   if (!token) return { valid: false };
   try {
     const parts = token.split(':');
     if (parts.length !== 4) return { valid: false };
     const [userId, role, timestampStr, receivedHmac] = parts;
 
-    // Check token age (max 30 days)
+    // Max 30-day session age check
     const timestamp = parseInt(timestampStr, 10);
     const maxAgeMs = 30 * 24 * 60 * 60 * 1000;
     if (isNaN(timestamp) || Date.now() - timestamp > maxAgeMs) {
       return { valid: false };
     }
 
-    // Basic validity check of session token components
-    if (userId && (role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'STAFF') && receivedHmac) {
-      return { valid: true, userId, role };
+    const secret = process.env.ADMIN_SECRET_KEY || process.env.NEXTAUTH_SECRET || 'angel-secure-crypto-fallback-key-2026';
+    const payload = `${userId}:${role}:${timestampStr}`;
+
+    // Web Crypto API HMAC-SHA256 signature verification
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(secret);
+    const messageData = encoder.encode(payload);
+
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+
+    const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+    const expectedHmac = Array.from(new Uint8Array(signature))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    // Constant-time string comparison
+    if (expectedHmac.length !== receivedHmac.length) return { valid: false };
+    let diff = 0;
+    for (let i = 0; i < expectedHmac.length; i++) {
+      diff |= expectedHmac.charCodeAt(i) ^ receivedHmac.charCodeAt(i);
     }
 
-    return { valid: false };
+    if (diff !== 0) return { valid: false };
+
+    return { valid: true, userId, role };
   } catch {
     return { valid: false };
   }
+}
+
+export async function generateAdminSessionTokenEdge(userId: string, role: string): Promise<string> {
+  const secret = process.env.ADMIN_SECRET_KEY || process.env.NEXTAUTH_SECRET || 'angel-secure-crypto-fallback-key-2026';
+  const timestamp = Date.now().toString();
+  const payload = `${userId}:${role}:${timestamp}`;
+
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const messageData = encoder.encode(payload);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+  const hmacHex = Array.from(new Uint8Array(signature))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  return `${payload}:${hmacHex}`;
 }

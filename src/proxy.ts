@@ -2,13 +2,13 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { verifyAdminSessionTokenEdge } from '@/lib/auth-token';
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Intercept all /admin routes except /admin/login
   if (pathname.startsWith('/admin') && pathname !== '/admin/login') {
     const adminToken = request.cookies.get('angel_admin_session')?.value;
-    const { valid } = verifyAdminSessionTokenEdge(adminToken || '');
+    const { valid } = await verifyAdminSessionTokenEdge(adminToken || '');
     if (!valid) {
       const loginUrl = new URL('/admin/login', request.url);
       return NextResponse.redirect(loginUrl);
@@ -33,9 +33,6 @@ export function proxy(request: NextRequest) {
 
   return NextResponse.next();
 }
-
-// Keep export middleware for backward compatibility if needed by older Next.js loaders
-export const middleware = proxy;
 
 export const config = {
   matcher: ['/admin/:path*', '/checkout/:path*', '/payment/:path*', '/orders/:path*', '/account/:path*'],
