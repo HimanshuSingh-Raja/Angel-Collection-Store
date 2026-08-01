@@ -18,17 +18,37 @@ export const Header: React.FC = () => {
   const { wishlist } = useWishlist();
 
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isVisible, setIsVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeMegaCategory, setActiveMegaCategory] = useState<string | null>(null);
   const megaMenuTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Smart Hide on Scroll Down, Show on Scroll Up
   useEffect(() => {
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 15);
+      if (typeof window !== 'undefined') {
+        const currentScrollY = window.scrollY;
+
+        setIsScrolled(currentScrollY > 15);
+
+        if (currentScrollY > 80) {
+          if (currentScrollY > lastScrollY && currentScrollY - lastScrollY > 6) {
+            setIsVisible(false);
+          } else if (lastScrollY - currentScrollY > 6) {
+            setIsVisible(true);
+          }
+        } else {
+          setIsVisible(true);
+        }
+
+        setLastScrollY(currentScrollY);
+      }
     };
-    window.addEventListener('scroll', handleScroll);
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [lastScrollY]);
 
   const categories = [
     { name: 'NEW ARRIVALS', href: '/shop?collection=new-arrivals' },
@@ -62,68 +82,70 @@ export const Header: React.FC = () => {
 
   return (
     <header
-      className={`sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#ECECEC] transition-all duration-300 font-sans ${
-        isScrolled ? 'shadow-[0_4px_25px_rgba(0,0,0,0.05)]' : 'shadow-none'
-      }`}
+      className={`sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#ECECEC] transition-transform duration-300 font-sans ${
+        isVisible ? 'translate-y-0' : '-translate-y-full'
+      } ${isScrolled ? 'shadow-[0_4px_25px_rgba(0,0,0,0.05)]' : 'shadow-none'}`}
     >
-      {/* MAIN TOP BAR (85px Height Desktop, Compact Mobile) */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-[85px] flex items-center justify-between gap-4 sm:gap-6">
-        {/* Mobile menu trigger */}
+      {/* MAIN TOP BAR: Hamburger (44px) | Centered Logo | Wishlist (44px) | Profile (44px) | Bag (44px) */}
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-[85px] flex items-center justify-between gap-2 sm:gap-6">
+        {/* Hamburger Menu Trigger */}
         <button
           onClick={() => setMobileMenuOpen(true)}
-          className="lg:hidden p-2 min-h-[44px] min-w-[44px] text-neutral-800 hover:text-black focus:outline-none flex items-center justify-center cursor-pointer"
+          className="lg:hidden w-11 h-11 rounded-full text-neutral-800 hover:text-black hover:bg-neutral-100/80 transition flex items-center justify-center cursor-pointer min-h-[44px] min-w-[44px] shrink-0"
           aria-label="Open navigation menu"
         >
-          <Menu className="w-6 h-6" />
+          <Menu className="w-5 h-5" />
         </button>
 
-        {/* BRAND LOGO */}
-        <AngelLogo variant="full" />
+        {/* Centered Brand Logo */}
+        <div className="flex-1 lg:flex-none flex justify-center lg:justify-start">
+          <AngelLogo variant="full" />
+        </div>
 
-        {/* CENTER: LARGE PREMIUM SEARCH BAR (Desktop) */}
+        {/* Center: Search Bar (Desktop) */}
         <div className="hidden lg:flex flex-1 justify-center px-4 max-w-xl">
           <SearchBar />
         </div>
 
-        {/* RIGHT SIDE ACTIONS: WISHLIST + ACCOUNT + CART */}
-        <div className="flex items-center space-x-3 sm:space-x-5 shrink-0">
-          {/* Wishlist */}
+        {/* Right Side Actions: Wishlist | Profile | Bag (Uniform Sizes & Alignment) */}
+        <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
+          {/* Wishlist Button */}
           <Link
             href="/wishlist"
-            className="flex flex-col items-center justify-center text-neutral-700 hover:text-black transition group relative focus:outline-none min-h-[44px]"
+            className="flex flex-col items-center justify-center min-h-[44px] min-w-[44px] px-1 sm:px-2 group focus:outline-none"
             aria-label="View Wishlist"
           >
-            <div className="p-1.5 sm:p-2 rounded-full group-hover:bg-neutral-100/80 transition relative flex items-center justify-center">
+            <div className="w-9 h-9 rounded-full text-neutral-700 group-hover:text-black group-hover:bg-neutral-100 transition flex items-center justify-center relative">
               <Heart className="w-5 h-5" />
               {wishlist.length > 0 && (
-                <span className="absolute top-0 right-0 w-4 h-4 rounded-full bg-amber-700 text-white text-[10px] font-bold flex items-center justify-center shadow-sm">
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-700 text-white text-[10px] font-bold flex items-center justify-center shadow-xs">
                   {wishlist.length}
                 </span>
               )}
             </div>
-            <span className="text-[10px] uppercase font-semibold text-neutral-600 group-hover:text-black tracking-wider hidden sm:block">
+            <span className="text-[10px] uppercase font-bold text-neutral-600 tracking-wider hidden md:block mt-1">
               Wishlist
             </span>
           </Link>
 
-          {/* Account Profile Dropdown */}
+          {/* Profile Dropdown / Mobile Drawer Trigger */}
           <ProfileDropdown />
 
-          {/* Cart Icon Drawer Trigger */}
+          {/* Cart Bag Icon Button */}
           <button
             onClick={() => setIsCartOpen(true)}
-            className="flex flex-col items-center justify-center group focus:outline-none min-h-[44px] cursor-pointer"
+            className="flex flex-col items-center justify-center min-h-[44px] min-w-[44px] px-1 sm:px-2 group focus:outline-none cursor-pointer"
             aria-label="Open Shopping Bag"
           >
-            <div className="p-2 sm:p-2.5 rounded-full bg-neutral-900 text-white hover:bg-neutral-800 transition relative flex items-center justify-center shadow-md">
-              <ShoppingBag className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-300" />
+            <div className="w-9 h-9 rounded-full text-neutral-700 group-hover:text-black group-hover:bg-neutral-100 transition flex items-center justify-center relative">
+              <ShoppingBag className="w-5 h-5" />
               {totalItemsCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-600 text-neutral-950 text-[10px] font-bold flex items-center justify-center shadow-sm">
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-700 text-white text-[10px] font-bold flex items-center justify-center shadow-xs">
                   {totalItemsCount}
                 </span>
               )}
             </div>
-            <span className="text-[10px] uppercase font-semibold text-neutral-600 group-hover:text-black tracking-wider hidden sm:block">
+            <span className="text-[10px] uppercase font-bold text-neutral-600 tracking-wider hidden md:block mt-1">
               Bag
             </span>
           </button>
@@ -141,9 +163,9 @@ export const Header: React.FC = () => {
           <Link
             key={cat.name}
             href={cat.href}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 transition min-h-[36px] flex items-center ${
+            className={`px-3.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 transition min-h-[36px] flex items-center ${
               pathname === cat.href
-                ? 'bg-neutral-900 text-white'
+                ? 'bg-neutral-950 text-white shadow-xs'
                 : cat.isSale
                 ? 'bg-rose-50 text-rose-600 border border-rose-200'
                 : cat.isFeatured
@@ -156,7 +178,7 @@ export const Header: React.FC = () => {
         ))}
       </div>
 
-      {/* CATEGORY NAVIGATION ROW (Desktop) */}
+      {/* DESKTOP CATEGORY NAVIGATION ROW */}
       <div
         className="hidden lg:block relative bg-white border-t border-[#ECECEC]/60"
         onMouseLeave={handleCategoryMouseLeave}
@@ -188,7 +210,6 @@ export const Header: React.FC = () => {
                     {cat.isFeatured && <Sparkles className="w-3 h-3 text-amber-600 inline" />}
                     <span>{cat.name}</span>
 
-                    {/* Hover Underline */}
                     <span
                       className={`absolute -bottom-1.5 left-0 w-full h-[2px] bg-amber-700 transition-transform duration-200 transform origin-left ${
                         isActive || isHovered ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
@@ -218,7 +239,7 @@ export const Header: React.FC = () => {
         )}
       </div>
 
-      {/* LUXURY REDESIGNED MOBILE NAVIGATION DRAWER */}
+      {/* LUXURY REDESIGNED MOBILE SIDE MENU DRAWER VIA PORTAL */}
       <MobileNavDrawer isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
     </header>
   );

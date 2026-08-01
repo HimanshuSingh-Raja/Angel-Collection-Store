@@ -1,22 +1,24 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   ChevronRight,
-  ChevronDown,
-  ChevronUp,
   X,
-  Loader2,
-  PackageX,
   SlidersHorizontal,
+  ArrowUpDown,
+  PackageX,
 } from 'lucide-react';
 import { ProductCard } from '@/components/store/ProductCard';
+import { ProductSkeleton } from '@/components/store/ProductSkeleton';
+import { FilterBottomSheet } from '@/components/store/FilterBottomSheet';
+import { SortBottomSheet } from '@/components/store/SortBottomSheet';
 import { QuickViewModal } from '@/components/store/QuickViewModal';
+import { SearchBar } from '@/components/navbar/SearchBar';
 import { searchProductsAction } from '@/actions/search-actions';
 import { detectCategoryFromQuery } from '@/lib/search/utils';
-import { Product } from '@/types';
+import { Product, FilterState } from '@/types';
 import { INITIAL_PRODUCTS } from '@/lib/mock-data';
 
 export default function SearchPage() {
@@ -24,37 +26,34 @@ export default function SearchPage() {
   const rawQuery = searchParams.get('q') || 'Sarees';
 
   const [query, setQuery] = useState(rawQuery);
-  const [category, setCategory] = useState(searchParams.get('category') || 'all');
-  const [sortBy, setSortBy] = useState<'relevance' | 'price_asc' | 'price_desc' | 'rating' | 'newest'>('relevance');
-  const [priceRange, setPriceRange] = useState<number>(50000);
-  const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([]);
-  const [selectedColors, setSelectedColors] = useState<string[]>([]);
-
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [detectedCategoryName, setDetectedCategoryName] = useState('Sarees');
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
 
-  // Accordion Expand/Collapse States
-  const [openSections, setOpenSections] = useState<{ [key: string]: boolean }>({
-    categories: true,
-    price: true,
-    color: false,
-    fabric: false,
-    occasion: false,
-    discount: false,
-    brand: false,
-    rating: false,
+  const [filters, setFilters] = useState<FilterState>({
+    category: searchParams.get('category') || '',
+    subcategory: '',
+    brand: '',
+    minPrice: 0,
+    maxPrice: 60000,
+    colors: [],
+    sizes: [],
+    rating: 0,
+    inStockOnly: false,
+    onSaleOnly: false,
+    sortBy: 'newest',
+    searchQuery: rawQuery,
   });
 
-  const toggleSection = (section: string) => {
-    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
-  };
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const [sortSheetOpen, setSortSheetOpen] = useState(false);
 
   // Sync state if URL query changes
   useEffect(() => {
     const qParam = searchParams.get('q') || 'Sarees';
     setQuery(qParam);
+    setFilters((prev) => ({ ...prev, searchQuery: qParam }));
     const detected = detectCategoryFromQuery(qParam);
     setDetectedCategoryName(detected.displayName || qParam.charAt(0).toUpperCase() + qParam.slice(1));
   }, [searchParams]);
@@ -63,334 +62,210 @@ export default function SearchPage() {
   useEffect(() => {
     async function executeSearch() {
       setLoading(true);
-      const res = await searchProductsAction({
-        query,
-        category,
-        maxPrice: priceRange,
-        sortBy,
-      });
+      try {
+        const mappedSort =
+          filters.sortBy === 'price-low'
+            ? 'price_asc'
+            : filters.sortBy === 'price-high'
+            ? 'price_desc'
+            : filters.sortBy === 'rating'
+            ? 'rating'
+            : filters.sortBy === 'newest'
+            ? 'newest'
+            : 'relevance';
 
-      if (res.success) {
-        setProducts(res.products as any);
-        if (res.detectedCategory && res.detectedCategory !== 'All Collections') {
-          setDetectedCategoryName(res.detectedCategory);
+        const res = await searchProductsAction({
+          query,
+          category: filters.category || undefined,
+          maxPrice: filters.maxPrice,
+          sortBy: mappedSort,
+        });
+
+        if (res?.success && Array.isArray(res.products)) {
+          setProducts(res.products as any);
+          if (res.detectedCategory && res.detectedCategory !== 'All Collections') {
+            setDetectedCategoryName(res.detectedCategory);
+          }
+        } else {
+          setProducts(INITIAL_PRODUCTS as any);
         }
-      } else {
+      } catch (err) {
         setProducts(INITIAL_PRODUCTS as any);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
 
     executeSearch();
-  }, [query, category, priceRange, sortBy]);
+  }, [query, filters.category, filters.maxPrice, filters.sortBy]);
 
-  // Handle Subcategory Checkbox Toggle
-  const toggleSubcategory = (sub: string) => {
-    setSelectedSubcategories((prev) =>
-      prev.includes(sub) ? prev.filter((s) => s !== sub) : [...prev, sub]
-    );
+  const resetFilters = () => {
+    setFilters({
+      category: '',
+      subcategory: '',
+      brand: '',
+      minPrice: 0,
+      maxPrice: 60000,
+      colors: [],
+      sizes: [],
+      rating: 0,
+      inStockOnly: false,
+      onSaleOnly: false,
+      sortBy: 'newest',
+      searchQuery: query,
+    });
   };
 
-  const handleResetFilters = () => {
-    setCategory('all');
-    setPriceRange(50000);
-    setSelectedSubcategories([]);
-    setSelectedColors([]);
-    setSortBy('relevance');
-  };
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.category) count++;
+    if (filters.maxPrice < 60000) count++;
+    if (filters.colors.length > 0) count += filters.colors.length;
+    if (filters.rating > 0) count++;
+    return count;
+  }, [filters]);
 
   return (
-    <div className="min-h-screen bg-white font-sans text-neutral-900 pb-24 pt-6">
-      <div className="max-w-7xl mx-auto px-4 sm:px-8 space-y-6">
-        {/* BREADCRUMBS (Home > Women > Sarees) */}
+    <div className="min-h-screen bg-white font-sans text-neutral-900 pb-24 pt-4 sm:pt-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-8 space-y-4 sm:space-y-6">
+        {/* Top Sticky Search Bar for Mobile Search Results */}
+        <div className="block lg:hidden">
+          <SearchBar />
+        </div>
+
+        {/* BREADCRUMBS */}
         <nav className="flex items-center space-x-2 text-xs text-neutral-500 font-medium">
           <Link href="/" className="hover:text-neutral-900 transition">
             Home
           </Link>
           <ChevronRight className="w-3 h-3 text-neutral-400" />
-          <Link href="/shop?category=women" className="hover:text-neutral-900 transition">
-            Women
+          <Link href="/shop" className="hover:text-neutral-900 transition">
+            Shop
           </Link>
           <ChevronRight className="w-3 h-3 text-neutral-400" />
-          <span className="text-neutral-900 font-semibold">{detectedCategoryName}</span>
+          <span className="text-neutral-900 font-semibold">{query}</span>
         </nav>
 
-        {/* TITLE & SORT HEADER ROW */}
-        <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-4 pb-2 border-b border-neutral-100">
+        {/* TITLE HEADER */}
+        <div className="flex items-baseline justify-between pb-2 border-b border-neutral-100">
           <div>
-            <h1 className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-neutral-900 flex items-baseline gap-2">
-              <span>{detectedCategoryName}</span>
+            <h1 className="font-serif text-xl sm:text-3xl font-bold tracking-tight text-neutral-900 flex items-baseline gap-2">
+              <span>Results for &quot;{query}&quot;</span>
               <span className="text-xs sm:text-sm font-normal text-neutral-400 font-sans">
-                ({products.length} {products.length === 1 ? 'result' : 'results'})
+                ({products.length} {products.length === 1 ? 'item' : 'items'})
               </span>
             </h1>
-            <p className="text-xs text-neutral-500 mt-1 font-light">
-              Explore our exclusive collection of luxury {detectedCategoryName.toLowerCase()} for every occasion.
-            </p>
           </div>
+        </div>
 
-          {/* TOP RIGHT SORT DROPDOWN */}
-          <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
-            <span className="text-xs text-neutral-500 font-medium">Sort by:</span>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="px-3 py-1.5 bg-white text-xs font-semibold text-neutral-900 rounded-xl border border-neutral-200 focus:outline-none focus:border-amber-700 cursor-pointer shadow-sm"
+        {/* HORIZONTAL FILTER CHIPS ROW */}
+        <div className="sticky top-[64px] lg:top-[85px] z-30 bg-white/95 backdrop-blur-md py-3 border-y border-neutral-200/80 -mx-3 px-3 sm:mx-0 sm:px-0">
+          <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar">
+            {/* Filter Bottom Sheet Trigger */}
+            <button
+              onClick={() => setFilterSheetOpen(true)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition shrink-0 min-h-[38px] cursor-pointer border ${
+                activeFilterCount > 0
+                  ? 'bg-amber-100 text-amber-950 border-amber-300 shadow-xs'
+                  : 'bg-neutral-950 text-white border-neutral-950 shadow-sm'
+              }`}
             >
-              <option value="relevance">Relevance</option>
-              <option value="price_asc">Price: Low to High</option>
-              <option value="price_desc">Price: High to Low</option>
-              <option value="rating">Highest Rated</option>
-              <option value="newest">New Arrivals</option>
-            </select>
-          </div>
-        </div>
-
-        {/* ACTIVE FILTER CHIPS ROW */}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-neutral-100 text-neutral-800 text-xs font-medium border border-neutral-200/60">
-            {detectedCategoryName}
-            <button onClick={() => setDetectedCategoryName('Products')} className="hover:text-rose-600">
-              <X className="w-3 h-3" />
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Filter</span>
+              {activeFilterCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-amber-700 text-white text-[10px] flex items-center justify-center font-extrabold ml-1">
+                  {activeFilterCount}
+                </span>
+              )}
             </button>
-          </span>
 
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-neutral-100 text-neutral-800 text-xs font-medium border border-neutral-200/60">
-            Women
-            <button onClick={() => setCategory('all')} className="hover:text-rose-600">
-              <X className="w-3 h-3" />
+            {/* Sort Bottom Sheet Trigger */}
+            <button
+              onClick={() => setSortSheetOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white text-neutral-800 border border-neutral-200 hover:border-neutral-400 text-xs font-semibold transition shrink-0 min-h-[38px] cursor-pointer"
+            >
+              <ArrowUpDown className="w-3.5 h-3.5 text-amber-700" />
+              <span>
+                Sort:{' '}
+                {filters.sortBy === 'newest'
+                  ? 'Newest'
+                  : filters.sortBy === 'price-low'
+                  ? 'Price: Low-High'
+                  : filters.sortBy === 'price-high'
+                  ? 'Price: High-Low'
+                  : 'Rating'}
+              </span>
             </button>
-          </span>
 
-          <button
-            onClick={handleResetFilters}
-            className="text-xs font-bold text-amber-800 hover:underline ml-2 cursor-pointer"
-          >
-            Clear All
-          </button>
-        </div>
-
-        {/* MAIN BODY: SIDEBAR + 4-COLUMN PRODUCT GRID */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start pt-2">
-          {/* LEFT ACCORDION FILTERS SIDEBAR (3 COLS = 25%) */}
-          <div className="lg:col-span-3 space-y-5 pr-2">
-            <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-neutral-900">FILTERS</span>
+            {activeFilterCount > 0 && (
               <button
-                onClick={handleResetFilters}
-                className="text-[10px] font-bold uppercase text-amber-800 hover:underline cursor-pointer"
+                onClick={resetFilters}
+                className="text-xs text-rose-600 font-bold px-2 shrink-0 flex items-center gap-1 cursor-pointer min-h-[38px]"
               >
-                RESET ALL
+                <X className="w-3.5 h-3.5" />
+                Clear
               </button>
-            </div>
-
-            {/* Accordion 1: Categories */}
-            <div className="border-b border-neutral-200 pb-4 space-y-3">
-              <button
-                onClick={() => toggleSection('categories')}
-                className="w-full flex justify-between items-center text-xs font-bold uppercase tracking-wider text-neutral-900 cursor-pointer"
-              >
-                <span>CATEGORIES</span>
-                {openSections.categories ? <ChevronUp className="w-4 h-4 text-neutral-500" /> : <ChevronDown className="w-4 h-4 text-neutral-500" />}
-              </button>
-
-              {openSections.categories && (
-                <div className="space-y-2.5 pt-1 text-xs text-neutral-700 font-sans">
-                  {[
-                    { name: 'Silk Sarees', count: 96 },
-                    { name: 'Banarasi Sarees', count: 48 },
-                    { name: 'Georgette Sarees', count: 42 },
-                    { name: 'Organza Sarees', count: 30 },
-                    { name: 'Kanjivaram Sarees', count: 30 },
-                  ].map((sub) => (
-                    <label key={sub.name} className="flex items-center justify-between cursor-pointer group">
-                      <div className="flex items-center space-x-2.5">
-                        <input
-                          type="checkbox"
-                          checked={selectedSubcategories.includes(sub.name)}
-                          onChange={() => toggleSubcategory(sub.name)}
-                          className="w-4 h-4 rounded border-neutral-300 text-amber-800 focus:ring-0 cursor-pointer"
-                        />
-                        <span className="group-hover:text-neutral-900 transition">{sub.name}</span>
-                      </div>
-                      <span className="text-[11px] text-neutral-400 font-mono">({sub.count})</span>
-                    </label>
-                  ))}
-                  <button className="text-xs font-bold text-neutral-500 hover:text-amber-800 pt-1 block cursor-pointer">
-                    + 8 more
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Accordion 2: Price Range */}
-            <div className="border-b border-neutral-200 pb-4 space-y-3">
-              <button
-                onClick={() => toggleSection('price')}
-                className="w-full flex justify-between items-center text-xs font-bold uppercase tracking-wider text-neutral-900 cursor-pointer"
-              >
-                <span>PRICE</span>
-                {openSections.price ? <ChevronUp className="w-4 h-4 text-neutral-500" /> : <ChevronDown className="w-4 h-4 text-neutral-500" />}
-              </button>
-
-              {openSections.price && (
-                <div className="space-y-3 pt-1 text-xs text-neutral-700">
-                  <div className="flex justify-between font-semibold text-neutral-900">
-                    <span>₹1,000</span>
-                    <span>₹{priceRange.toLocaleString()}+</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={1000}
-                    max={100000}
-                    step={2000}
-                    value={priceRange}
-                    onChange={(e) => setPriceRange(Number(e.target.value))}
-                    className="w-full accent-amber-800 cursor-pointer"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Accordion 3: Color */}
-            <div className="border-b border-neutral-200 pb-4 space-y-3">
-              <button
-                onClick={() => toggleSection('color')}
-                className="w-full flex justify-between items-center text-xs font-bold uppercase tracking-wider text-neutral-900 cursor-pointer"
-              >
-                <span>COLOR</span>
-                {openSections.color ? <ChevronUp className="w-4 h-4 text-neutral-500" /> : <ChevronDown className="w-4 h-4 text-neutral-500" />}
-              </button>
-              {openSections.color && (
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {['Rose Gold', 'Mint Green', 'Deep Red', 'Beige', 'Royal Blue', 'Emerald'].map((col) => (
-                    <button
-                      key={col}
-                      onClick={() =>
-                        setSelectedColors((prev) =>
-                          prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]
-                        )
-                      }
-                      className={`px-3 py-1 rounded-full text-[11px] font-medium border transition cursor-pointer ${
-                        selectedColors.includes(col)
-                          ? 'bg-neutral-900 text-white border-neutral-900'
-                          : 'bg-neutral-50 text-neutral-700 border-neutral-200 hover:border-neutral-400'
-                      }`}
-                    >
-                      {col}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Accordion 4: Fabric */}
-            <div className="border-b border-neutral-200 pb-4 space-y-3">
-              <button
-                onClick={() => toggleSection('fabric')}
-                className="w-full flex justify-between items-center text-xs font-bold uppercase tracking-wider text-neutral-900 cursor-pointer"
-              >
-                <span>FABRIC</span>
-                {openSections.fabric ? <ChevronUp className="w-4 h-4 text-neutral-500" /> : <ChevronDown className="w-4 h-4 text-neutral-500" />}
-              </button>
-            </div>
-
-            {/* Accordion 5: Occasion */}
-            <div className="border-b border-neutral-200 pb-4 space-y-3">
-              <button
-                onClick={() => toggleSection('occasion')}
-                className="w-full flex justify-between items-center text-xs font-bold uppercase tracking-wider text-neutral-900 cursor-pointer"
-              >
-                <span>OCCASION</span>
-                {openSections.occasion ? <ChevronUp className="w-4 h-4 text-neutral-500" /> : <ChevronDown className="w-4 h-4 text-neutral-500" />}
-              </button>
-            </div>
-
-            {/* Accordion 6: Discount */}
-            <div className="border-b border-neutral-200 pb-4 space-y-3">
-              <button
-                onClick={() => toggleSection('discount')}
-                className="w-full flex justify-between items-center text-xs font-bold uppercase tracking-wider text-neutral-900 cursor-pointer"
-              >
-                <span>DISCOUNT</span>
-                {openSections.discount ? <ChevronUp className="w-4 h-4 text-neutral-500" /> : <ChevronDown className="w-4 h-4 text-neutral-500" />}
-              </button>
-            </div>
-
-            {/* Accordion 7: Brand */}
-            <div className="border-b border-neutral-200 pb-4 space-y-3">
-              <button
-                onClick={() => toggleSection('brand')}
-                className="w-full flex justify-between items-center text-xs font-bold uppercase tracking-wider text-neutral-900 cursor-pointer"
-              >
-                <span>BRAND</span>
-                {openSections.brand ? <ChevronUp className="w-4 h-4 text-neutral-500" /> : <ChevronDown className="w-4 h-4 text-neutral-500" />}
-              </button>
-            </div>
-
-            {/* Accordion 8: Rating */}
-            <div className="border-b border-neutral-200 pb-4 space-y-3">
-              <button
-                onClick={() => toggleSection('rating')}
-                className="w-full flex justify-between items-center text-xs font-bold uppercase tracking-wider text-neutral-900 cursor-pointer"
-              >
-                <span>RATING</span>
-                {openSections.rating ? <ChevronUp className="w-4 h-4 text-neutral-500" /> : <ChevronDown className="w-4 h-4 text-neutral-500" />}
-              </button>
-            </div>
-          </div>
-
-          {/* RIGHT 4-COLUMN PRODUCT GRID (9 COLS = 75%) */}
-          <div className="lg:col-span-9 w-full">
-            {loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                  <div key={i} className="animate-pulse space-y-3">
-                    <div className="aspect-[3/4] bg-neutral-200 rounded-2xl" />
-                    <div className="h-4 bg-neutral-200 rounded w-3/4" />
-                    <div className="h-3 bg-neutral-200 rounded w-1/2" />
-                  </div>
-                ))}
-              </div>
-            ) : products.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {products.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    onQuickView={(p) => setQuickViewProduct(p)}
-                  />
-                ))}
-              </div>
-            ) : (
-              /* EMPTY STATE */
-              <div className="py-20 text-center space-y-4">
-                <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto text-neutral-400">
-                  <PackageX className="w-8 h-8" />
-                </div>
-                <h3 className="font-serif text-xl font-bold text-neutral-900">No Matching Sarees Found</h3>
-                <p className="text-xs text-neutral-500 max-w-sm mx-auto">
-                  Try adjusting your filter criteria or searching for another luxury category.
-                </p>
-                <button
-                  onClick={handleResetFilters}
-                  className="px-6 py-2.5 bg-neutral-900 text-white font-bold text-xs rounded-xl hover:bg-black transition cursor-pointer"
-                >
-                  Reset All Filters
-                </button>
-              </div>
             )}
           </div>
+        </div>
+
+        {/* 2-COLUMN MOBILE PRODUCT GRID */}
+        <div className="w-full pt-2">
+          {loading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                <ProductSkeleton key={i} />
+              ))}
+            </div>
+          ) : products.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+              {products.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  onQuickView={(p) => setQuickViewProduct(p)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="py-20 text-center space-y-4 bg-neutral-50 rounded-3xl p-8 border border-neutral-100">
+              <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto text-neutral-400">
+                <PackageX className="w-8 h-8" />
+              </div>
+              <h3 className="font-serif text-xl font-bold text-neutral-900">No Matching Items Found</h3>
+              <p className="text-xs text-neutral-500 max-w-sm mx-auto">
+                Try searching for another luxury keyword like &quot;Saree&quot;, &quot;Lehenga&quot; or &quot;Bag&quot;.
+              </p>
+              <button
+                onClick={resetFilters}
+                className="px-6 py-3 bg-neutral-950 text-white font-bold text-xs rounded-xl hover:bg-neutral-800 transition cursor-pointer shadow-md min-h-[44px]"
+              >
+                Reset Filters
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Quick View Modal */}
-      {quickViewProduct && (
-        <QuickViewModal
-          product={quickViewProduct}
-          onClose={() => setQuickViewProduct(null)}
-        />
-      )}
+      <QuickViewModal product={quickViewProduct} onClose={() => setQuickViewProduct(null)} />
+
+      {/* Mobile Filter & Sort Bottom Sheets */}
+      <FilterBottomSheet
+        isOpen={filterSheetOpen}
+        onClose={() => setFilterSheetOpen(false)}
+        filters={filters}
+        setFilters={setFilters}
+        resetFilters={resetFilters}
+        activeCount={activeFilterCount}
+      />
+
+      <SortBottomSheet
+        isOpen={sortSheetOpen}
+        onClose={() => setSortSheetOpen(false)}
+        sortBy={filters.sortBy}
+        setSortBy={(val) => setFilters((prev) => ({ ...prev, sortBy: val }))}
+      />
     </div>
   );
 }

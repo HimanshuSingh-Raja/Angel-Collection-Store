@@ -99,22 +99,22 @@ export const HeroSlider: React.FC = () => {
   ];
 
   return (
-    <div className="w-full space-y-4 sm:space-y-6 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-2 sm:pt-4">
-      {/* 1. LUXURY MOBILE HERO BANNER (Zara / Louis Vuitton Aesthetic: Edge-to-Edge Image, Lower Left Text, 440px Mobile Height) */}
+    <div className="relative z-1 w-full space-y-4 sm:space-y-6 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-3 sm:pt-6">
+      {/* 1. LUXURY MOBILE HERO BANNER */}
       <div
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="relative w-full h-[440px] sm:h-[480px] lg:h-[540px] bg-[#0F1218] rounded-2xl sm:rounded-3xl overflow-hidden border border-neutral-800 shadow-xl"
+        className="relative w-full h-[420px] sm:h-[480px] lg:h-[540px] bg-[#0F1218] rounded-2xl sm:rounded-3xl overflow-hidden border border-neutral-800 shadow-xl"
       >
         {/* Full-bleed Edge-to-Edge Background Image */}
         <AnimatePresence mode="wait">
           <motion.div
             key={currentSlide}
-            initial={{ opacity: 0, scale: 1.04 }}
+            initial={{ opacity: 0, scale: 1.03 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
             className="absolute inset-0 w-full h-full"
           >
             <Image
@@ -126,13 +126,13 @@ export const HeroSlider: React.FC = () => {
               className="w-full h-full object-cover object-center sm:object-[center_top]"
               unoptimized
             />
-            {/* Soft Bottom Gradient Overlay for High Contrast Text Readability */}
+            {/* Soft Bottom Gradient Overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent z-10" />
           </motion.div>
         </AnimatePresence>
 
-        {/* Lower Left Floating Content Overlay */}
-        <div className="absolute bottom-10 left-4 right-4 sm:bottom-14 sm:left-10 z-20 max-w-xl space-y-2.5 sm:space-y-4">
+        {/* Lower Left Content Overlay */}
+        <div className="absolute bottom-8 left-4 right-4 sm:bottom-14 sm:left-10 z-20 max-w-xl space-y-2 sm:space-y-4">
           <div className="flex items-center gap-2">
             <span className="px-3 py-1 rounded-full bg-amber-500/20 backdrop-blur-md border border-amber-500/40 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.25em] text-amber-300 shadow-sm">
               ✦ HAUTE COUTURE 2026
@@ -142,11 +142,11 @@ export const HeroSlider: React.FC = () => {
           <AnimatePresence mode="wait">
             <motion.div
               key={currentSlide}
-              initial={{ opacity: 0, y: 12 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              transition={{ duration: 0.35 }}
-              className="space-y-1.5"
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-1"
             >
               <h1 className="font-serif text-2xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white leading-tight drop-shadow-md">
                 {activeBanner.title}
@@ -157,7 +157,7 @@ export const HeroSlider: React.FC = () => {
             </motion.div>
           </AnimatePresence>
 
-          {/* Action Buttons (Height 44px, Rounded, Compact) */}
+          {/* Action Buttons */}
           <div className="flex items-center gap-2.5 pt-1">
             <Link
               href={activeBanner.link || '/shop'}
@@ -184,7 +184,7 @@ export const HeroSlider: React.FC = () => {
           </div>
         </div>
 
-        {/* Previous / Next Desktop Navigation Arrows */}
+        {/* Arrows (Desktop) */}
         <button
           onClick={prevSlide}
           className="hidden sm:flex absolute left-4 top-1/2 -translate-y-1/2 z-30 p-2.5 rounded-full bg-black/40 text-white hover:bg-amber-400 hover:text-neutral-950 transition backdrop-blur-md border border-white/20 cursor-pointer min-h-[44px] min-w-[44px] items-center justify-center"
@@ -200,7 +200,7 @@ export const HeroSlider: React.FC = () => {
           <ChevronRight className="w-5 h-5" />
         </button>
 
-        {/* Slider Indicator Dots (Bottom Center) */}
+        {/* Slider Indicator Dots */}
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center space-x-2">
           {INITIAL_BANNERS.map((_, idx) => (
             <button
@@ -222,7 +222,7 @@ export const HeroSlider: React.FC = () => {
             <Link
               key={cat.name}
               href={cat.href}
-              className="px-3 py-2.5 rounded-xl bg-white border border-neutral-200/80 shadow-xs hover:border-amber-600 transition flex items-center gap-1.5 shrink-0 group min-h-[44px]"
+              className="px-3.5 py-2.5 rounded-xl bg-white border border-neutral-200/80 shadow-xs hover:border-amber-600 transition flex items-center gap-1.5 shrink-0 group min-h-[44px]"
             >
               <span className="text-sm">{cat.icon}</span>
               <span className="text-[11px] font-bold text-neutral-800 group-hover:text-amber-800 uppercase tracking-wider">

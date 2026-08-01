@@ -4,10 +4,14 @@ import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { FilterSidebar } from '@/components/store/FilterSidebar';
 import { ProductCard } from '@/components/store/ProductCard';
+import { ProductSkeleton } from '@/components/store/ProductSkeleton';
+import { FilterBottomSheet } from '@/components/store/FilterBottomSheet';
+import { SortBottomSheet } from '@/components/store/SortBottomSheet';
 import { QuickViewModal } from '@/components/store/QuickViewModal';
+import { SearchBar } from '@/components/navbar/SearchBar';
 import { INITIAL_PRODUCTS } from '@/lib/mock-data';
 import { Product, FilterState } from '@/types';
-import { SlidersHorizontal, Sparkles, Loader2 } from 'lucide-react';
+import { SlidersHorizontal, ArrowUpDown, Sparkles, X, ChevronDown } from 'lucide-react';
 import { getStorefrontProductsAction } from '@/actions/product-store';
 
 function ShopContent() {
@@ -34,7 +38,8 @@ function ShopContent() {
     searchQuery: '',
   });
 
-  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const [sortSheetOpen, setSortSheetOpen] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
 
   // Sync state when URL searchParams change
@@ -48,7 +53,7 @@ function ShopContent() {
     }));
   }, [searchParams]);
 
-  // Fetch live published products from PostgreSQL matching category AND type/subcategory
+  // Fetch live published products from database or fallback to mock
   useEffect(() => {
     async function loadLiveProducts() {
       setLoading(true);
@@ -63,7 +68,6 @@ function ShopContent() {
         if (dbProducts && dbProducts.length > 0) {
           setProductsList(dbProducts as any);
         } else {
-          // Fallback to filtering initial mock dataset with singular/plural normalization
           const filteredMock = (INITIAL_PRODUCTS as any[]).filter((p) => {
             if (filters.category && p.category?.slug !== filters.category && p.category?.name?.toLowerCase() !== filters.category.toLowerCase()) {
               return false;
@@ -93,7 +97,7 @@ function ShopContent() {
           setProductsList(filteredMock as any);
         }
       } catch (err) {
-        console.error('Failed to load DB products:', err);
+        console.error('Failed to load products:', err);
       } finally {
         setLoading(false);
       }
@@ -118,6 +122,19 @@ function ShopContent() {
       searchQuery: '',
     });
   };
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.category) count++;
+    if (filters.subcategory) count++;
+    if (filters.brand) count++;
+    if (filters.maxPrice < 60000) count++;
+    if (filters.colors.length > 0) count += filters.colors.length;
+    if (filters.sizes.length > 0) count += filters.sizes.length;
+    if (filters.rating > 0) count++;
+    if (filters.onSaleOnly) count++;
+    return count;
+  }, [filters]);
 
   const filteredProducts = useMemo(() => {
     return productsList
@@ -169,57 +186,168 @@ function ShopContent() {
       });
   }, [productsList, filters]);
 
+  const categoriesPills = [
+    { name: 'All', value: '' },
+    { name: 'Women', value: 'women' },
+    { name: 'Men', value: 'men' },
+    { name: 'Kids', value: 'kids' },
+    { name: 'Bags', value: 'bags' },
+    { name: 'Jewellery', value: 'jewellery' },
+    { name: 'Beauty', value: 'beauty' },
+  ];
+
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-12 font-sans pb-24">
-      {/* Header Banner */}
-      <div className="mb-6 sm:mb-10 text-center sm:text-left border-b border-neutral-200 pb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div>
-          <span className="text-[10px] sm:text-xs uppercase tracking-[0.3em] font-bold text-amber-700">EXCLUSIVE CATALOGUE</span>
-          <h1 className="font-serif text-2xl sm:text-4xl font-bold tracking-tight text-neutral-900 mt-1 capitalize">
-            {filters.category ? `${filters.category} ${filters.subcategory ? '› ' + filters.subcategory : 'Collection'}` : 'The Haute Couture Shop'}
-          </h1>
-          <p className="text-xs text-neutral-500 mt-1">Showing {filteredProducts.length} luxury products</p>
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 font-sans pb-24">
+      {/* 1. TOP STICKY SEARCH BAR & CATEGORIES FOR MOBILE PLP */}
+      <div className="space-y-3 mb-4">
+        <div className="block lg:hidden">
+          <SearchBar />
         </div>
 
-        {/* Sort & Filter Drawer Trigger */}
-        <div className="flex items-center space-x-3 w-full sm:w-auto">
-          <button
-            onClick={() => setMobileFilterOpen(true)}
-            className="lg:hidden flex-1 py-2.5 px-4 bg-white border border-neutral-300 rounded-xl text-xs font-bold text-neutral-900 flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-          >
-            <SlidersHorizontal className="w-4 h-4" />
-            <span>Filters</span>
-          </button>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 hidden sm:inline">Sort:</span>
-            <select
-              value={filters.sortBy}
-              onChange={(e) => setFilters((prev) => ({ ...prev, sortBy: e.target.value as any }))}
-              className="py-2.5 px-3 bg-white border border-neutral-300 rounded-xl text-xs font-semibold text-neutral-900 focus:outline-none focus:border-amber-600 cursor-pointer shadow-sm"
-            >
-              <option value="newest">Newest Arrivals</option>
-              <option value="popularity">Most Popular</option>
-              <option value="price-low">Price: Low to High</option>
-              <option value="price-high">Price: High to Low</option>
-              <option value="rating">Highest Rated</option>
-            </select>
-          </div>
+        {/* Horizontal Category Chips */}
+        <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar py-1">
+          {categoriesPills.map((cat) => {
+            const isSelected = filters.category === cat.value;
+            return (
+              <button
+                key={cat.name}
+                onClick={() => setFilters((prev) => ({ ...prev, category: cat.value, subcategory: '' }))}
+                className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider shrink-0 transition min-h-[36px] cursor-pointer ${
+                  isSelected
+                    ? 'bg-neutral-950 text-white shadow-md'
+                    : 'bg-white text-neutral-700 border border-neutral-200/80 hover:bg-neutral-100'
+                }`}
+              >
+                {cat.name}
+              </button>
+            );
+          })}
         </div>
       </div>
 
+      {/* 2. HORIZONTAL FILTER CHIPS ROW */}
+      <div className="sticky top-[64px] lg:top-[85px] z-30 bg-white/95 backdrop-blur-md py-3 border-y border-neutral-200/80 -mx-3 px-3 sm:mx-0 sm:px-0 mb-6">
+        <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar">
+          {/* Main Filter Bottom Sheet Trigger */}
+          <button
+            onClick={() => setFilterSheetOpen(true)}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition shrink-0 min-h-[38px] cursor-pointer border ${
+              activeFilterCount > 0
+                ? 'bg-amber-100 text-amber-950 border-amber-300 shadow-xs'
+                : 'bg-neutral-950 text-white border-neutral-950 shadow-sm'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Filter</span>
+            {activeFilterCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-amber-700 text-white text-[10px] flex items-center justify-center font-extrabold ml-1">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+
+          {/* Sort Bottom Sheet Trigger */}
+          <button
+            onClick={() => setSortSheetOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white text-neutral-800 border border-neutral-200 hover:border-neutral-400 text-xs font-semibold transition shrink-0 min-h-[38px] cursor-pointer"
+          >
+            <ArrowUpDown className="w-3.5 h-3.5 text-amber-700" />
+            <span>
+              Sort:{' '}
+              {filters.sortBy === 'newest'
+                ? 'Newest'
+                : filters.sortBy === 'price-low'
+                ? 'Price: Low-High'
+                : filters.sortBy === 'price-high'
+                ? 'Price: High-Low'
+                : filters.sortBy === 'rating'
+                ? 'Top Rated'
+                : 'Popular'}
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 text-neutral-400" />
+          </button>
+
+          {/* Quick Filter Pill: On Sale Only */}
+          <button
+            onClick={() => setFilters((prev) => ({ ...prev, onSaleOnly: !prev.onSaleOnly }))}
+            className={`px-3.5 py-2 rounded-full text-xs font-semibold border transition shrink-0 min-h-[38px] cursor-pointer ${
+              filters.onSaleOnly
+                ? 'bg-rose-50 text-rose-700 border-rose-300 font-bold'
+                : 'bg-white text-neutral-700 border-neutral-200/80 hover:bg-neutral-50'
+            }`}
+          >
+            On Sale
+          </button>
+
+          {/* Quick Filter Pill: Price <= 30000 */}
+          <button
+            onClick={() =>
+              setFilters((prev) => ({
+                ...prev,
+                maxPrice: prev.maxPrice === 30000 ? 60000 : 30000,
+              }))
+            }
+            className={`px-3.5 py-2 rounded-full text-xs font-semibold border transition shrink-0 min-h-[38px] cursor-pointer ${
+              filters.maxPrice === 30000
+                ? 'bg-amber-50 text-amber-900 border-amber-300 font-bold'
+                : 'bg-white text-neutral-700 border-neutral-200/80 hover:bg-neutral-50'
+            }`}
+          >
+            Under ₹30,000
+          </button>
+
+          {/* Quick Filter Pill: Rating 4.0+ */}
+          <button
+            onClick={() => setFilters((prev) => ({ ...prev, rating: prev.rating === 4 ? 0 : 4 }))}
+            className={`px-3.5 py-2 rounded-full text-xs font-semibold border transition shrink-0 min-h-[38px] cursor-pointer ${
+              filters.rating === 4
+                ? 'bg-amber-50 text-amber-900 border-amber-300 font-bold'
+                : 'bg-white text-neutral-700 border-neutral-200/80 hover:bg-neutral-50'
+            }`}
+          >
+            ★ 4.0 & Above
+          </button>
+
+          {/* Clear Active Filters */}
+          {activeFilterCount > 0 && (
+            <button
+              onClick={resetFilters}
+              className="text-xs text-rose-600 hover:underline font-bold px-2 shrink-0 flex items-center gap-1 cursor-pointer min-h-[38px]"
+            >
+              <X className="w-3.5 h-3.5" />
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Main PLP Header Title */}
+      <div className="mb-4 flex items-baseline justify-between">
+        <div>
+          <span className="text-[10px] uppercase tracking-[0.25em] font-extrabold text-amber-800">
+            ANGEL HAUTE COUTURE
+          </span>
+          <h1 className="font-serif text-xl sm:text-3xl font-bold tracking-tight text-neutral-950 capitalize mt-0.5">
+            {filters.category ? `${filters.category} ${filters.subcategory ? '› ' + filters.subcategory : 'Collection'}` : 'All Luxury Items'}
+          </h1>
+        </div>
+        <p className="text-xs text-neutral-500 font-medium">{filteredProducts.length} items</p>
+      </div>
+
+      {/* Grid Layout: Desktop Sidebar + 2-Column Mobile Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* Desktop Filter Sidebar */}
         <div className="hidden lg:block">
           <FilterSidebar filters={filters} setFilters={setFilters} resetFilters={resetFilters} />
         </div>
 
-        {/* Products Grid (2 columns on Mobile <640px, 3 on Desktop) */}
+        {/* Product Listing Grid (2 Columns on Mobile <640px) */}
         <div className="lg:col-span-3">
           {loading ? (
-            <div className="py-20 text-center text-xs text-neutral-400 flex items-center justify-center gap-2">
-              <Loader2 className="w-5 h-5 animate-spin text-amber-700" />
-              <span>Fetching matching catalogue...</span>
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <ProductSkeleton key={i} />
+              ))}
             </div>
           ) : filteredProducts.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
@@ -232,15 +360,15 @@ function ShopContent() {
               ))}
             </div>
           ) : (
-            <div className="py-20 text-center bg-white rounded-3xl border border-neutral-100 p-8 space-y-4">
+            <div className="py-16 text-center bg-white rounded-3xl border border-neutral-100 p-8 space-y-4 shadow-xs">
               <Sparkles className="w-12 h-12 text-amber-500 mx-auto" />
               <h3 className="font-serif text-xl font-bold text-neutral-900">No luxury items match your criteria</h3>
               <p className="text-xs text-neutral-500 max-w-sm mx-auto">
-                Try loosening your search query, price slider, or subcategory filters to view more items.
+                Try loosening your filters or price limit to discover more items from our collection.
               </p>
               <button
                 onClick={resetFilters}
-                className="px-6 py-3 bg-neutral-900 text-white text-xs font-bold uppercase tracking-widest rounded-full hover:bg-amber-700 transition cursor-pointer"
+                className="px-6 py-3 bg-neutral-950 text-white text-xs font-bold uppercase tracking-widest rounded-full hover:bg-amber-700 transition cursor-pointer shadow-md min-h-[44px]"
               >
                 Clear All Filters
               </button>
@@ -249,24 +377,26 @@ function ShopContent() {
         </div>
       </div>
 
-      {/* Quick View Drawer Modal */}
+      {/* Quick View Modal */}
       <QuickViewModal product={quickViewProduct} onClose={() => setQuickViewProduct(null)} />
 
-      {/* Mobile Filter Slide Bottom Sheet Drawer */}
-      {mobileFilterOpen && (
-        <div className="fixed inset-0 z-50 flex lg:hidden">
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobileFilterOpen(false)} />
-          <div className="relative bg-white w-4/5 max-w-sm h-full shadow-2xl p-6 overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-neutral-200">
-              <h3 className="font-serif text-lg font-bold">Filters</h3>
-              <button onClick={() => setMobileFilterOpen(false)} className="text-xs font-bold text-neutral-500 cursor-pointer">
-                Close
-              </button>
-            </div>
-            <FilterSidebar filters={filters} setFilters={setFilters} resetFilters={resetFilters} />
-          </div>
-        </div>
-      )}
+      {/* Mobile Filter Bottom Sheet */}
+      <FilterBottomSheet
+        isOpen={filterSheetOpen}
+        onClose={() => setFilterSheetOpen(false)}
+        filters={filters}
+        setFilters={setFilters}
+        resetFilters={resetFilters}
+        activeCount={activeFilterCount}
+      />
+
+      {/* Mobile Sort Bottom Sheet */}
+      <SortBottomSheet
+        isOpen={sortSheetOpen}
+        onClose={() => setSortSheetOpen(false)}
+        sortBy={filters.sortBy}
+        setSortBy={(val) => setFilters((prev) => ({ ...prev, sortBy: val }))}
+      />
     </div>
   );
 }

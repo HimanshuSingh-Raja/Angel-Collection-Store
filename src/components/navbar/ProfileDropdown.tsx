@@ -19,12 +19,12 @@ import {
   LogOut,
   ChevronRight,
   Sparkles,
-  X,
   Gift,
   Ticket,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
+import { MobileProfileDrawer } from './MobileProfileDrawer';
 
 export const ProfileDropdown: React.FC = () => {
   const router = useRouter();
@@ -32,6 +32,7 @@ export const ProfileDropdown: React.FC = () => {
   const { setIsOpen: setIsCartOpen } = useCart();
 
   const [isOpen, setIsOpen] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -49,6 +50,7 @@ export const ProfileDropdown: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsOpen(false);
+        setMobileDrawerOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -79,7 +81,11 @@ export const ProfileDropdown: React.FC = () => {
   };
 
   const handleTriggerClick = () => {
-    setIsOpen((prev) => !prev);
+    if (isMobile) {
+      setMobileDrawerOpen(true);
+    } else {
+      setIsOpen((prev) => !prev);
+    }
   };
 
   const handleLinkClick = () => {
@@ -123,74 +129,51 @@ export const ProfileDropdown: React.FC = () => {
   ];
 
   return (
-    <div
-      ref={dropdownRef}
-      className="relative inline-block text-left"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
-      <button
-        onClick={handleTriggerClick}
-        aria-expanded={isOpen}
-        aria-haspopup="true"
-        aria-label="User account menu"
-        className="flex flex-col items-center group focus:outline-none"
+    <>
+      <div
+        ref={dropdownRef}
+        className="relative inline-block text-left"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
-        <div
-          className={`p-2 rounded-full transition-all duration-200 flex items-center justify-center ${
-            isOpen ? 'bg-neutral-100 text-black shadow-inner' : 'text-neutral-700 group-hover:text-black group-hover:bg-neutral-100/80'
-          }`}
+        <button
+          onClick={handleTriggerClick}
+          aria-expanded={isOpen || mobileDrawerOpen}
+          aria-haspopup="true"
+          aria-label="User account menu"
+          className="flex flex-col items-center justify-center min-h-[44px] min-w-[44px] px-1 sm:px-2 group focus:outline-none cursor-pointer"
         >
-          {user?.avatar ? (
-            <img
-              src={user.avatar}
-              alt={user.name}
-              className="w-5 h-5 rounded-full object-cover border border-amber-600/50"
-            />
-          ) : (
-            <UserIcon className="w-5 h-5" />
-          )}
-        </div>
-        <span className="text-[10px] uppercase font-semibold text-neutral-600 group-hover:text-black tracking-wider hidden sm:block">
-          Account
-        </span>
-      </button>
-
-      <AnimatePresence>
-        {isOpen && (
-          <>
-            {isMobile && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setIsOpen(false)}
-                className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 lg:hidden"
+          <div
+            className={`w-9 h-9 rounded-full transition-all duration-200 flex items-center justify-center ${
+              isOpen || mobileDrawerOpen
+                ? 'bg-neutral-950 text-white shadow-sm'
+                : 'text-neutral-700 group-hover:text-black group-hover:bg-neutral-100'
+            }`}
+          >
+            {user?.avatar ? (
+              <img
+                src={user.avatar}
+                alt={user.name}
+                className="w-5 h-5 rounded-full object-cover border border-amber-600/50"
               />
+            ) : (
+              <UserIcon className="w-5 h-5" />
             )}
+          </div>
+          <span className="text-[10px] uppercase font-bold text-neutral-600 tracking-wider hidden md:block mt-1">
+            Account
+          </span>
+        </button>
 
+        {/* DESKTOP POPOVER MENU */}
+        <AnimatePresence>
+          {isOpen && !isMobile && (
             <motion.div
-              initial={
-                isMobile
-                  ? { y: '100%', opacity: 0 }
-                  : { opacity: 0, y: -10, scale: 0.96 }
-              }
-              animate={
-                isMobile
-                  ? { y: 0, opacity: 1 }
-                  : { opacity: 1, y: 0, scale: 1 }
-              }
-              exit={
-                isMobile
-                  ? { y: '100%', opacity: 0 }
-                  : { opacity: 0, y: -8, scale: 0.96 }
-              }
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              className={`z-50 bg-white font-sans text-neutral-900 border border-neutral-100 shadow-[0_20px_50px_rgba(0,0,0,0.14)] ${
-                isMobile
-                  ? 'fixed bottom-0 left-0 right-0 rounded-t-3xl p-6 max-h-[85vh] overflow-y-auto lg:hidden'
-                  : 'absolute right-0 mt-3 w-[300px] rounded-2xl p-5 hidden lg:block'
-              }`}
+              initial={{ opacity: 0, y: -10, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.96 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="z-50 bg-white font-sans text-neutral-900 border border-neutral-100 shadow-[0_20px_50px_rgba(0,0,0,0.14)] absolute right-0 mt-3 w-[300px] rounded-2xl p-5 hidden lg:block"
             >
               <div className="pb-4 border-b border-neutral-100 flex items-center justify-between">
                 <div className="space-y-1">
@@ -229,15 +212,6 @@ export const ProfileDropdown: React.FC = () => {
                     )}
                   </div>
                 </div>
-
-                {isMobile && (
-                  <button
-                    onClick={() => setIsOpen(false)}
-                    className="p-1 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                )}
               </div>
 
               <div className="py-2 divide-y divide-neutral-100">
@@ -287,9 +261,15 @@ export const ProfileDropdown: React.FC = () => {
                 </div>
               )}
             </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-    </div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* MOBILE RIGHT SLIDING PROFILE DRAWER VIA PORTAL */}
+      <MobileProfileDrawer
+        isOpen={mobileDrawerOpen}
+        onClose={() => setMobileDrawerOpen(false)}
+      />
+    </>
   );
 };

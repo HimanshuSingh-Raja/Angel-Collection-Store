@@ -19,31 +19,33 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
   const { toggleWishlist, isInWishlist } = useWishlist();
 
   const [isHovered, setIsHovered] = useState(false);
-  const [selectedSize, setSelectedSize] = useState<string | null>(null);
-
   const inWishlist = isInWishlist(product.id);
   const discount = calculateDiscountPercentage(product.price, product.compareAtPrice);
-  const primaryImg = product.images[0]?.url || 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=800';
-  const secondaryImg = product.images[1]?.url || primaryImg;
+  const primaryImg = product.images?.[0]?.url || 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=800';
+  const secondaryImg = product.images?.[1]?.url || primaryImg;
+
+  const brandName =
+    typeof product.brand === 'object' && product.brand?.name
+      ? product.brand.name
+      : typeof product.category === 'object' && product.category?.name
+      ? product.category.name
+      : 'Angel Sovereign';
 
   const handleQuickAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    addToCart(product, selectedSize || product.sizes?.[0]);
+    addToCart(product, product.sizes?.[0] || 'Standard');
   };
 
   return (
     <div
-      className="group relative flex flex-col h-full bg-white rounded-2xl overflow-hidden border border-neutral-100/80 shadow-sm hover:shadow-xl transition-all duration-300"
+      className="group relative flex flex-col h-full bg-white rounded-[18px] overflow-hidden border border-neutral-100/90 shadow-xs hover:shadow-xl transition-all duration-300"
       onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       aria-label={`Product card for ${product.title}`}
-      onMouseLeave={() => {
-        setIsHovered(false);
-        setSelectedSize(null);
-      }}
     >
-      {/* Image Wrapper */}
-      <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-100">
+      {/* 4:5 Image Ratio Container with Rounded 18px */}
+      <div className="relative aspect-[4/5] w-full overflow-hidden bg-neutral-100">
         <Link href={`/product/${product.slug}`} className="block h-full w-full relative">
           <Image
             src={isHovered ? secondaryImg : primaryImg}
@@ -52,109 +54,102 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className="h-full w-full object-cover object-center transition-transform duration-700 ease-out group-hover:scale-105"
             unoptimized
+            loading="lazy"
           />
         </Link>
 
         {/* Badges */}
         <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10">
           {discount > 0 && (
-            <span className="px-2 py-0.5 rounded bg-rose-600 text-white text-[9px] sm:text-[10px] font-bold tracking-wider uppercase shadow-sm">
+            <span className="px-2 py-0.5 rounded-md bg-rose-600 text-white text-[9px] sm:text-[10px] font-extrabold tracking-wider uppercase shadow-sm">
               -{discount}% OFF
             </span>
           )}
           {product.isNewArrival && (
-            <span className="px-2 py-0.5 rounded bg-neutral-900 text-amber-300 text-[9px] sm:text-[10px] font-bold tracking-wider uppercase shadow-sm border border-amber-500/30 flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded-md bg-neutral-950 text-amber-300 text-[9px] sm:text-[10px] font-bold tracking-wider uppercase shadow-sm border border-amber-500/30 flex items-center gap-1">
               <Sparkles className="w-2.5 h-2.5 text-amber-400" /> NEW
-            </span>
-          )}
-          {product.stock <= product.lowStockThreshold && product.stock > 0 && (
-            <span className="px-2 py-0.5 rounded bg-amber-500 text-white text-[9px] sm:text-[10px] font-bold tracking-wider uppercase shadow-sm">
-              ONLY {product.stock} LEFT
             </span>
           )}
         </div>
 
-        {/* Wishlist Heart Button */}
+        {/* Floating Heart Wishlist Button */}
         <button
           onClick={(e) => {
             e.preventDefault();
+            e.stopPropagation();
             toggleWishlist(product);
           }}
-          className={`absolute top-2.5 right-2.5 z-10 p-2 sm:p-2.5 rounded-full transition-all duration-300 backdrop-blur-md min-h-[44px] min-w-[44px] flex items-center justify-center ${
+          className={`absolute top-2.5 right-2.5 z-10 p-2 rounded-full transition-all duration-300 backdrop-blur-md min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer ${
             inWishlist
-              ? 'bg-rose-600 text-white shadow-lg'
+              ? 'bg-rose-600 text-white shadow-md'
               : 'bg-white/85 text-neutral-700 hover:bg-white hover:text-rose-600'
           }`}
           aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
         >
-          <Heart className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${inWishlist ? 'fill-current' : ''}`} />
+          <Heart className={`w-4 h-4 ${inWishlist ? 'fill-current' : ''}`} />
         </button>
 
-        {/* Action Overlay Bar (Desktop Hover) */}
-        <div
-          className={`hidden sm:flex absolute bottom-3 inset-x-3 z-10 items-center justify-between gap-2 transition-all duration-300 ${
-            isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
-          }`}
-        >
-          {onQuickView && (
+        {/* Desktop Quick View Overlay */}
+        {onQuickView && (
+          <div
+            className={`hidden sm:flex absolute bottom-3 inset-x-3 z-10 items-center justify-center transition-all duration-300 ${
+              isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+            }`}
+          >
             <button
               onClick={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 onQuickView(product);
               }}
-              className="flex-1 py-2.5 bg-white/90 backdrop-blur-md text-neutral-900 rounded-xl text-xs font-semibold hover:bg-white hover:text-black transition shadow-lg flex items-center justify-center gap-1.5 min-h-[44px]"
+              className="w-full py-2.5 bg-white/95 backdrop-blur-md text-neutral-950 rounded-xl text-xs font-bold hover:bg-neutral-950 hover:text-white transition shadow-lg flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer"
             >
               <Eye className="w-3.5 h-3.5" />
               <span>QUICK VIEW</span>
             </button>
-          )}
-
-          <button
-            onClick={handleQuickAdd}
-            className="flex-1 py-2.5 bg-neutral-950 text-white rounded-xl text-xs font-semibold hover:bg-amber-600 hover:text-neutral-950 transition shadow-lg flex items-center justify-center gap-1.5 min-h-[44px]"
-          >
-            <ShoppingBag className="w-3.5 h-3.5 text-amber-300" />
-            <span>ADD TO CART</span>
-          </button>
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Product Information Footer */}
-      <div className="p-3 sm:p-4 flex flex-col justify-between flex-1">
+      {/* Product Details Section */}
+      <div className="p-3 sm:p-4 flex flex-col justify-between flex-1 space-y-2">
         <div>
-          <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-neutral-400 font-medium block mb-1">
-            {typeof product.brand === 'object' ? product.brand?.name : typeof product.category === 'object' ? product.category?.name : 'Angel Collection'}
+          <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-neutral-400 font-bold block truncate">
+            {brandName}
           </span>
           <Link href={`/product/${product.slug}`}>
-            <h3 className="font-sans text-xs sm:text-sm font-semibold text-neutral-900 hover:text-amber-800 transition line-clamp-2 leading-snug">
+            <h3 className="font-sans text-xs sm:text-sm font-semibold text-neutral-900 hover:text-amber-800 transition line-clamp-2 leading-tight mt-0.5">
               {product.title}
             </h3>
           </Link>
         </div>
 
-        {/* Rating Breakdown */}
-        <div className="flex items-center space-x-1.5 my-1.5">
-          <div className="flex items-center text-amber-500">
-            <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-current" />
-          </div>
-          <span className="text-[11px] sm:text-xs font-bold text-neutral-800">{(product.rating || 4.8).toFixed(1)}</span>
-          <span className="text-[10px] sm:text-[11px] text-neutral-400">({product.reviewCount || 124})</span>
+        {/* Rating Row */}
+        <div className="flex items-center space-x-1">
+          <Star className="w-3 h-3 text-amber-500 fill-current" />
+          <span className="text-[11px] font-bold text-neutral-800">{(product.rating || 4.8).toFixed(1)}</span>
+          <span className="text-[10px] text-neutral-400 font-normal">({product.reviewCount || 98})</span>
         </div>
 
-        {/* Pricing */}
-        <div className="flex items-baseline space-x-2 pt-0.5">
-          <span className="text-sm sm:text-base font-bold text-neutral-900">{formatPrice(product.price)}</span>
+        {/* Pricing Breakdown */}
+        <div className="flex items-baseline flex-wrap gap-1.5 pt-0.5">
+          <span className="text-xs sm:text-base font-bold text-neutral-950">{formatPrice(product.price)}</span>
           {product.compareAtPrice && product.compareAtPrice > product.price && (
-            <span className="text-[11px] sm:text-xs text-neutral-400 line-through">
-              {formatPrice(product.compareAtPrice)}
-            </span>
+            <>
+              <span className="text-[10px] sm:text-xs text-neutral-400 line-through">
+                {formatPrice(product.compareAtPrice)}
+              </span>
+              <span className="text-[10px] font-bold text-rose-600">
+                ({discount}% OFF)
+              </span>
+            </>
           )}
         </div>
 
-        {/* Mobile Touch Quick Add Button */}
+        {/* Add to Bag Button */}
         <button
           onClick={handleQuickAdd}
-          className="sm:hidden w-full mt-3 py-2.5 bg-neutral-950 text-white rounded-lg text-xs font-semibold hover:bg-neutral-800 transition flex items-center justify-center gap-1 cursor-pointer min-h-[44px]"
+          className="w-full mt-2 py-2.5 bg-neutral-950 hover:bg-neutral-800 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px] shadow-sm active:scale-98"
         >
           <ShoppingBag className="w-3.5 h-3.5 text-amber-300" />
           <span>ADD TO BAG</span>

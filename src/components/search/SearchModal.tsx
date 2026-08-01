@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -9,12 +10,8 @@ import {
   Mic,
   Flame,
   Clock,
-  Tag,
   ChevronRight,
-  Loader2,
-  Sparkles,
   ArrowRight,
-  TrendingUp,
 } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
 import { searchProductsAction } from '@/actions/search-actions';
@@ -32,6 +29,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
   const [isListening, setIsListening] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const trendingSearches = [
@@ -44,13 +42,16 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
   ];
 
   const popularCategories = [
-    { name: 'Sarees', slug: 'sarees', category: 'women' },
-    { name: 'Lehengas', slug: 'lehengas', category: 'women' },
-    { name: 'Kurtis', slug: 'kurtis', category: 'women' },
-    { name: 'Suits & Tuxedos', slug: 'suits', category: 'men' },
+    { name: 'Sarees & Couture', slug: 'women' },
+    { name: 'Bridal Lehengas', slug: 'women' },
+    { name: 'Men Suits & Tuxedos', slug: 'men' },
+    { name: 'Artisanal Handbags', slug: 'bags' },
   ];
 
-  // Load Search History from localStorage
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem('angel_search_history');
@@ -58,7 +59,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
     } catch (e) {}
   }, []);
 
-  // Save term to search history
   const saveSearchTerm = useCallback((term: string) => {
     if (!term.trim()) return;
     const updated = [term, ...history.filter((h) => h !== term)].slice(0, 5);
@@ -68,6 +68,15 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
     } catch (e) {}
   }, [history]);
 
+  const removeHistoryItem = (e: React.MouseEvent, term: string) => {
+    e.stopPropagation();
+    const updated = history.filter((h) => h !== term);
+    setHistory(updated);
+    try {
+      localStorage.setItem('angel_search_history', JSON.stringify(updated));
+    } catch (e) {}
+  };
+
   const clearHistory = () => {
     setHistory([]);
     try {
@@ -75,7 +84,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
     } catch (e) {}
   };
 
-  // Focus input when modal opens
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -83,7 +91,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
     }
   }, [isOpen]);
 
-  // Debounced Search Execution
   useEffect(() => {
     if (!query.trim()) {
       setResults([]);
@@ -93,17 +100,38 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
 
     setLoading(true);
     const timer = setTimeout(async () => {
-      const res = await searchProductsAction({ query: query.trim() });
-      if (res.success) {
-        setResults(res.products.slice(0, 6));
+      try {
+        const res = await searchProductsAction({ query: query.trim() });
+        if (res?.success && Array.isArray(res.products)) {
+          setResults(res.products.slice(0, 6));
+        } else {
+          setResults([]);
+        }
+      } catch (err) {
+        setResults([]);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    }, 250);
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [query]);
 
-  // Handle Keyboard Navigation (ArrowUp, ArrowDown, Enter, Escape)
+  const highlightMatch = (text: string, q: string) => {
+    if (!q.trim() || !text) return text;
+    const regex = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    const parts = text.split(regex);
+    return parts.map((part, i) =>
+      part.toLowerCase() === q.toLowerCase() ? (
+        <mark key={i} className="highlight">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    );
+  };
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -131,7 +159,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
     [results, selectedIndex, query, router, onClose, saveSearchTerm]
   );
 
-  // Web Speech API Voice Search
   const handleVoiceSearch = () => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       try {
@@ -154,36 +181,38 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xl flex items-start justify-center pt-16 sm:pt-24 px-4 font-sans">
-      <div className="bg-[#0B0E14] border border-[#202736] w-full max-w-3xl rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.8)] overflow-hidden space-y-0 text-xs">
-        {/* Search Header Bar */}
-        <div className="p-4 sm:p-5 border-b border-[#202736] flex items-center gap-3 relative">
-          <Search className="w-5 h-5 text-[#C8A45D] shrink-0" />
+  return createPortal(
+    <div className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-md flex items-start justify-center pt-4 sm:pt-16 px-3 sm:px-4 font-sans">
+      <div className="bg-white border border-neutral-200 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden space-y-0 text-xs z-[101]">
+        {/* Top Search Bar Row */}
+        <div className="p-4 sm:p-5 border-b border-neutral-100 flex items-center gap-3 relative bg-white">
+          <Search className="w-5 h-5 text-amber-700 shrink-0" />
           <input
             ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search luxury sarees, lehengas, suits, handbags..."
-            className="w-full bg-transparent text-sm sm:text-base text-white focus:outline-none placeholder:text-neutral-500 font-sans"
+            placeholder="Search products, brands, categories..."
+            className="w-full bg-transparent text-sm sm:text-base text-neutral-900 focus:outline-none placeholder:text-neutral-400 font-medium"
           />
 
           <div className="flex items-center gap-2 shrink-0">
-            {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin text-[#C8A45D]" />
-            ) : query ? (
-              <button onClick={() => setQuery('')} className="p-1 text-neutral-400 hover:text-white">
+            {query ? (
+              <button
+                onClick={() => setQuery('')}
+                className="p-1 text-neutral-400 hover:text-neutral-900 rounded-full"
+                aria-label="Clear input"
+              >
                 <X className="w-4 h-4" />
               </button>
             ) : (
               <button
                 onClick={handleVoiceSearch}
                 className={`p-2 rounded-full transition ${
-                  isListening ? 'bg-rose-500/20 text-rose-400 animate-pulse' : 'text-neutral-400 hover:text-[#C8A45D]'
+                  isListening ? 'bg-rose-50 text-rose-600 animate-pulse' : 'text-neutral-400 hover:text-amber-800'
                 }`}
                 title="Voice Search"
               >
@@ -191,26 +220,44 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
               </button>
             )}
 
-            <button onClick={onClose} className="p-2 rounded-xl bg-neutral-900 text-neutral-400 hover:text-white border border-[#202736]">
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl bg-neutral-100 text-neutral-600 hover:text-neutral-950 font-bold min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+            >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* Results / Autocomplete Body */}
-        <div className="p-5 max-h-[70vh] overflow-y-auto space-y-6">
+        <div className="p-4 sm:p-6 max-h-[75vh] overflow-y-auto space-y-6">
           {query.trim() !== '' ? (
             <div className="space-y-4">
-              <div className="flex items-center justify-between text-[11px] text-neutral-400 uppercase tracking-widest border-b border-[#202736] pb-2 font-mono">
-                <span>Matching Products ({results.length})</span>
-                <span>Use ↑ ↓ to navigate</span>
+              <div className="flex items-center justify-between text-[10px] text-neutral-400 uppercase tracking-widest border-b border-neutral-100 pb-2 font-mono">
+                <span>Matching Catalogue</span>
+                {!loading && <span>{results.length} items found</span>}
               </div>
 
-              {results.length > 0 ? (
+              {/* Skeleton Loader during fetch */}
+              {loading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="flex items-center gap-3.5 p-3 rounded-2xl bg-neutral-50 animate-pulse">
+                      <div className="w-14 h-16 bg-neutral-200 rounded-xl shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3 bg-neutral-200 rounded w-1/4" />
+                        <div className="h-4 bg-neutral-200 rounded w-3/4" />
+                        <div className="h-3 bg-neutral-200 rounded w-1/3" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : results.length > 0 ? (
                 <div className="space-y-2">
                   {results.map((prod, idx) => {
                     const isSelected = idx === selectedIndex;
                     const catName = typeof prod.category === 'object' ? prod.category?.name : prod.category;
+                    const brandName = typeof prod.brand === 'object' ? prod.brand?.name : 'Angel Sovereign';
                     return (
                       <Link
                         key={prod.id}
@@ -219,29 +266,41 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
                           saveSearchTerm(query);
                           onClose();
                         }}
-                        className={`flex items-center gap-4 p-3 rounded-2xl border transition group ${
+                        className={`flex items-center gap-3.5 p-2.5 rounded-2xl border transition group ${
                           isSelected
-                            ? 'bg-[#181D29] border-[#C8A45D]'
-                            : 'bg-[#121620] border-[#202736] hover:border-[#C8A45D]/60'
+                            ? 'bg-amber-50/80 border-amber-500'
+                            : 'bg-white border-neutral-100 hover:border-amber-400/60 hover:bg-neutral-50'
                         }`}
                       >
-                        <img
-                          src={prod.images[0]?.url}
-                          alt={prod.title}
-                          className="w-14 h-16 object-cover rounded-xl border border-[#202736]"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-[10px] uppercase font-bold text-[#C8A45D] font-mono">
-                            {catName || 'Luxury'}
-                          </span>
-                          <h4 className="text-sm font-bold text-white group-hover:text-[#C8A45D] transition line-clamp-1">
-                            {prod.title}
-                          </h4>
-                          <span className="text-xs font-mono font-bold text-emerald-400 mt-0.5 block">
-                            {formatPrice(prod.price)}
-                          </span>
+                        {/* 4:5 Aspect Thumbnail */}
+                        <div className="w-14 h-16 rounded-xl overflow-hidden bg-neutral-100 shrink-0 border border-neutral-100">
+                          <img
+                            src={prod.images?.[0]?.url || 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=300'}
+                            alt={prod.title}
+                            className="w-full h-full object-cover object-center"
+                          />
                         </div>
-                        <ChevronRight className="w-4 h-4 text-neutral-500 group-hover:text-[#C8A45D] transition" />
+
+                        <div className="flex-1 min-w-0">
+                          <span className="text-[10px] uppercase font-bold text-amber-800 block tracking-wider">
+                            {brandName} • {catName || 'Luxury'}
+                          </span>
+                          <h4 className="text-xs font-semibold text-neutral-900 group-hover:text-amber-900 transition line-clamp-1 mt-0.5">
+                            {highlightMatch(prod.title, query)}
+                          </h4>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs font-bold text-neutral-950">
+                              {formatPrice(prod.price)}
+                            </span>
+                            {prod.compareAtPrice && prod.compareAtPrice > prod.price && (
+                              <span className="text-[10px] text-neutral-400 line-through">
+                                {formatPrice(prod.compareAtPrice)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <ChevronRight className="w-4 h-4 text-neutral-300 group-hover:text-neutral-900 transition shrink-0" />
                       </Link>
                     );
                   })}
@@ -252,44 +311,50 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
                       router.push(`/search?q=${encodeURIComponent(query.trim())}`);
                       onClose();
                     }}
-                    className="w-full py-3 bg-[#121620] hover:bg-[#181D29] text-[#C8A45D] font-bold text-xs rounded-xl border border-[#202736] transition flex items-center justify-center gap-2 cursor-pointer mt-2"
+                    className="w-full py-3 bg-neutral-950 hover:bg-neutral-900 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer mt-3 min-h-[44px]"
                   >
-                    <span>View All Search Results for &quot;{query}&quot;</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <span>View all results for &quot;{query}&quot;</span>
+                    <ArrowRight className="w-4 h-4 text-amber-300" />
                   </button>
                 </div>
               ) : (
-                <div className="py-12 text-center space-y-3">
-                  <p className="text-neutral-400 text-sm">
-                    No luxury items found matching &quot;<span className="text-white font-bold">{query}</span>&quot;
+                <div className="py-12 text-center space-y-2 bg-neutral-50 rounded-2xl p-6">
+                  <p className="text-neutral-700 text-xs font-semibold">
+                    No items found matching &quot;<span className="text-amber-800 font-bold">{query}</span>&quot;
                   </p>
-                  <p className="text-xs text-neutral-500">Try searching for &quot;Saree&quot;, &quot;Lehenga&quot;, or &quot;Silk&quot;</p>
+                  <p className="text-[11px] text-neutral-400">Try searching for &quot;Saree&quot;, &quot;Lehenga&quot;, &quot;Bag&quot; or &quot;Silk&quot;</p>
                 </div>
               )}
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Search History */}
+              {/* Recent Searches */}
               {history.length > 0 && (
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between text-[11px] text-neutral-400 uppercase tracking-widest font-mono">
-                    <span className="flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-[#C8A45D]" /> Recent Searches
+                  <div className="flex items-center justify-between text-[10px] text-neutral-400 uppercase tracking-widest font-mono">
+                    <span className="flex items-center gap-1.5 font-bold">
+                      <Clock className="w-3.5 h-3.5 text-amber-700" /> Recent Searches
                     </span>
-                    <button onClick={clearHistory} className="text-neutral-500 hover:text-white text-[10px]">
+                    <button onClick={clearHistory} className="text-neutral-400 hover:text-neutral-950 text-[10px]">
                       Clear All
                     </button>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
                     {history.map((term) => (
-                      <button
+                      <span
                         key={term}
                         onClick={() => setQuery(term)}
-                        className="px-3 py-1.5 rounded-full bg-[#121620] text-neutral-300 hover:bg-[#C8A45D] hover:text-neutral-950 border border-[#202736] font-medium transition text-xs"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-neutral-100 hover:bg-neutral-900 hover:text-white text-neutral-800 font-medium transition cursor-pointer text-xs min-h-[36px]"
                       >
                         {term}
-                      </button>
+                        <button
+                          onClick={(e) => removeHistoryItem(e, term)}
+                          className="hover:text-rose-400 transition ml-1"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -297,15 +362,15 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
 
               {/* Trending Searches */}
               <div className="space-y-2">
-                <div className="flex items-center gap-1.5 text-[11px] text-[#C8A45D] uppercase tracking-widest font-mono font-bold">
-                  <Flame className="w-3.5 h-3.5" /> Trending Right Now
+                <div className="flex items-center gap-1.5 text-[10px] text-amber-800 uppercase tracking-widest font-mono font-bold">
+                  <Flame className="w-3.5 h-3.5 text-amber-600" /> Trending Right Now
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {trendingSearches.map((term) => (
                     <button
                       key={term}
                       onClick={() => setQuery(term)}
-                      className="px-3.5 py-1.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 hover:bg-amber-500 hover:text-neutral-950 font-medium transition text-xs"
+                      className="px-3.5 py-2 rounded-full bg-amber-50/80 text-amber-950 border border-amber-200/80 hover:bg-amber-700 hover:text-white font-medium transition text-xs cursor-pointer min-h-[36px]"
                     >
                       🔥 {term}
                     </button>
@@ -314,19 +379,20 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
               </div>
 
               {/* Popular Categories */}
-              <div className="space-y-2 pt-2 border-t border-[#202736]">
-                <span className="text-[11px] text-neutral-400 uppercase tracking-widest font-mono block">
+              <div className="space-y-2 pt-2 border-t border-neutral-100">
+                <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-mono block font-bold">
                   Popular Categories
                 </span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 gap-2.5">
                   {popularCategories.map((cat) => (
                     <Link
-                      key={cat.slug}
-                      href={`/shop?category=${cat.category}&type=${cat.slug}`}
+                      key={cat.name}
+                      href={`/shop?category=${cat.slug}`}
                       onClick={onClose}
-                      className="p-3 bg-[#121620] hover:bg-[#181D29] rounded-xl border border-[#202736] hover:border-[#C8A45D]/60 transition text-center font-bold text-white"
+                      className="p-3 bg-neutral-50 hover:bg-neutral-100 rounded-xl border border-neutral-200/60 transition flex items-center justify-between font-semibold text-neutral-900 text-xs min-h-[44px]"
                     >
-                      {cat.name}
+                      <span>{cat.name}</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-neutral-400" />
                     </Link>
                   ))}
                 </div>
@@ -335,6 +401,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
