@@ -110,8 +110,9 @@ export async function loginWithGooglePopup() {
 
     return user;
   } catch (err: any) {
-    console.error('❌ [Firebase Auth] loginWithGooglePopup error:', err);
-    throw new Error(formatFirebaseErrorMessage(err?.code));
+    console.error('❌ [Firebase Auth] loginWithGooglePopup error:', err?.code, err?.message, err);
+    const detailedMsg = err?.message || formatFirebaseErrorMessage(err?.code);
+    throw new Error(detailedMsg);
   }
 }
 
