@@ -22,6 +22,16 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, onClose
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [added, setAdded] = useState(false);
 
+  React.useEffect(() => {
+    if (!product) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = prevOverflow || '';
+    };
+  }, [product]);
+
   if (!product) return null;
 
   const inWishlist = isInWishlist(product.id);

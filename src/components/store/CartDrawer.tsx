@@ -32,6 +32,16 @@ export const CartDrawer: React.FC = () => {
   const [couponMsg, setCouponMsg] = useState<{ success: boolean; text: string } | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = prevOverflow || '';
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleApplyCoupon = (e: React.FormEvent) => {

@@ -37,18 +37,14 @@ export const MobileProfileDrawer: React.FC<MobileProfileDrawerProps> = ({ isOpen
     setMounted(true);
   }, []);
 
-  // Lock body scroll when profile drawer is open
+  // Safely lock body scroll when profile drawer is open
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      document.documentElement.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
-    }
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     return () => {
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
+      document.body.style.overflow = prevOverflow || '';
     };
   }, [isOpen]);
 
@@ -73,7 +69,7 @@ export const MobileProfileDrawer: React.FC<MobileProfileDrawerProps> = ({ isOpen
   return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex justify-end font-sans touch-none">
+        <div className="fixed inset-0 z-[100] flex justify-end font-sans">
           {/* Dark Overlay */}
           <motion.div
             initial={{ opacity: 0 }}

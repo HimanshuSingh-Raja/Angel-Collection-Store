@@ -36,18 +36,14 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
     setMounted(true);
   }, []);
 
-  // Strictly lock body & html scroll when drawer is active
+  // Safely lock body scroll when drawer is active
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      document.documentElement.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
-    }
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     return () => {
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
+      document.body.style.overflow = prevOverflow || '';
     };
   }, [isOpen]);
 
@@ -78,7 +74,7 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
   return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex font-sans touch-none lg:hidden">
+        <div className="fixed inset-0 z-[100] flex font-sans lg:hidden">
           {/* Dark Overlay with Backdrop Blur */}
           <motion.div
             initial={{ opacity: 0 }}

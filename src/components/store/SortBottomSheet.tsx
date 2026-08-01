@@ -25,16 +25,12 @@ export const SortBottomSheet: React.FC<SortBottomSheetProps> = ({
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      document.documentElement.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
-    }
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     return () => {
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
+      document.body.style.overflow = prevOverflow || '';
     };
   }, [isOpen]);
 
@@ -51,7 +47,7 @@ export const SortBottomSheet: React.FC<SortBottomSheetProps> = ({
   return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center font-sans touch-none">
+        <div className="fixed inset-0 z-[100] flex items-end justify-center font-sans">
           {/* Dark Overlay */}
           <motion.div
             initial={{ opacity: 0 }}

@@ -53,6 +53,16 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
   }, []);
 
   useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = prevOverflow || '';
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem('angel_search_history');
       if (saved) setHistory(JSON.parse(saved));
