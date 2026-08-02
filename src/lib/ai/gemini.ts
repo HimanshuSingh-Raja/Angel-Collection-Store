@@ -5,19 +5,8 @@ import { z } from 'zod';
  * Supported Models: gemini-1.5-flash, gemini-2.0-flash, gemini-1.5-pro
  */
 
-const FALLBACK_KEY_ENCODED = 'QVEuQWI4Uk42STJRYzV0NjNnRW93SDJKTWlMbEtYR3h4bzFXTWh6ZFNJaFQ3di0yOFp4Q0E=';
-
-function getEffectiveApiKey(): string {
-  const envKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-  if (envKey && envKey.trim().length > 5) {
-    return envKey.trim().replace(/^["']|["']$/g, '');
-  }
-  try {
-    return Buffer.from(FALLBACK_KEY_ENCODED, 'base64').toString('utf-8');
-  } catch {
-    return '';
-  }
-}
+const rawKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+const GEMINI_API_KEY = rawKey.trim().replace(/^["']|["']$/g, '');
 
 export interface GeminiProductAnalysisInput {
   images?: string[];
@@ -258,7 +247,11 @@ export function normalizeGeminiResponse(rawResponse: any, input: GeminiProductAn
 export async function generateProductListingWithGemini(
   input: GeminiProductAnalysisInput
 ): Promise<GeminiProductAnalysisResult> {
-  const apiKey = getEffectiveApiKey();
+  const apiKey = (process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not configured in Vercel Environment Variables. Please add a valid Gemini API key starting with AIzaSy.');
+  }
 
   // 1. Prepare Multimodal Image Parts for Gemini Vision
   const imageParts = await prepareImageParts(input.images || []);
@@ -321,10 +314,6 @@ Output ONLY a JSON object matching this schema:
     "costPrice": 8500
   }
 }`;
-
-  if (!apiKey || apiKey.includes('YOUR_API_KEY')) {
-    throw new Error('Gemini API key is missing. Please create a new Gemini API key at aistudio.google.com/app/apikey and add it to Vercel Environment Variables as GEMINI_API_KEY.');
-  }
 
   const candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
   let lastError = '';
@@ -394,5 +383,17 @@ Output ONLY a JSON object matching this schema:
   }
 
   console.error('❌ [GEMINI VISION ALL MODELS FAILED]:', lastError);
-  throw new Error('Unable to analyze this product image. Please try another image file or enter details manually.');
+
+  // Parse raw Google error JSON if present
+  let friendlyReason = 'Gemini API call failed.';
+  try {
+    const parsedErr = JSON.parse(lastError);
+    if (parsedErr?.error?.message) {
+      friendlyReason = parsedErr.error.message;
+    }
+  } catch (e) {
+    if (lastError) friendlyReason = lastError.slice(0, 150);
+  }
+
+  throw new Error(`Google Gemini API Error: ${friendlyReason}`);
 }
