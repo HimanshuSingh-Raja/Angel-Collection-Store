@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShieldCheck, Mail, ArrowRight, KeyRound } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -9,11 +9,35 @@ export default function AdminLoginPage() {
   const router = useRouter();
   const { setRole } = useAuth();
 
-  // Always start with empty manual inputs
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [error, setError] = useState('');
+
+  // 1. On mount, verify if admin session already exists
+  useEffect(() => {
+    async function checkExistingAdminSession() {
+      try {
+        const res = await fetch('/api/auth/admin-login', { method: 'GET' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.authenticated) {
+            console.log('🔒 [ADMIN LOGIN PAGE] Active admin session detected -> Redirecting to /admin');
+            setRole(data.role || 'OWNER');
+            router.replace('/admin');
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Session verification check failed:', err);
+      } finally {
+        setCheckingAuth(false);
+      }
+    }
+
+    checkExistingAdminSession();
+  }, [router, setRole]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,6 +65,17 @@ export default function AdminLoginPage() {
       setLoading(false);
     }
   };
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-[#0A0C10] flex items-center justify-center text-white font-sans">
+        <div className="flex items-center space-x-3">
+          <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-xs text-neutral-400 font-mono">Verifying Master Admin Session...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0A0C10] text-white flex items-center justify-center p-4 font-sans relative overflow-hidden">
@@ -109,7 +144,7 @@ export default function AdminLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-4 min-h-[44px] bg-amber-500 text-neutral-950 rounded-2xl font-bold uppercase tracking-[0.15em] hover:bg-amber-400 transition flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 cursor-pointer font-bold"
+              className="w-full py-4 min-h-[44px] bg-amber-500 text-neutral-950 rounded-2xl font-bold uppercase tracking-[0.15em] hover:bg-amber-400 transition flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 cursor-pointer"
             >
               {loading ? (
                 <span>VERIFYING CREDENTIALS...</span>

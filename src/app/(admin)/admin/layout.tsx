@@ -1,44 +1,17 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import React, { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const [isAuthorized, setIsAuthorized] = useState(false);
-
-  useEffect(() => {
-    if (pathname === '/admin/login') {
-      setIsAuthorized(true);
-      return;
-    }
-
-    const hasAdminSession = document.cookie.split(';').some((item) => item.trim().startsWith('angel_admin_session='));
-    if (!hasAdminSession) {
-      router.replace('/admin/login');
-    } else {
-      setIsAuthorized(true);
-    }
-  }, [pathname, router]);
 
   // Do not render admin sidebar/header on the login screen
   if (pathname === '/admin/login') {
     return <main className="min-h-screen bg-[#0A0C10] text-white">{children}</main>;
-  }
-
-  if (!isAuthorized) {
-    return (
-      <div className="min-h-screen bg-[#0A0C10] flex items-center justify-center text-white">
-        <div className="flex items-center space-x-3">
-          <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-          <span className="text-sm font-medium text-gray-400">Verifying Admin Authentication...</span>
-        </div>
-      </div>
-    );
   }
 
   return (

@@ -9,7 +9,7 @@ async function verifyAdminToken(token: string): Promise<boolean> {
     const [userId, role, timestampStr, receivedHmac] = parts;
 
     const timestamp = parseInt(timestampStr, 10);
-    const maxAgeMs = 30 * 24 * 60 * 60 * 1000;
+    const maxAgeMs = 30 * 24 * 60 * 60 * 1000; // 30 Days Session Expiry
     if (isNaN(timestamp) || Date.now() - timestamp > maxAgeMs) {
       return false;
     }
@@ -53,17 +53,31 @@ async function verifyAdminToken(token: string): Promise<boolean> {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Intercept all /admin routes except /admin/login
+  // 1. Check if user is accessing /admin/login while ALREADY authenticated
+  if (pathname === '/admin/login') {
+    const adminToken = request.cookies.get('angel_admin_session')?.value;
+    const isValid = await verifyAdminToken(adminToken || '');
+    if (isValid) {
+      console.log('🔒 [AUTH PROXY] Authenticated session detected on /admin/login -> Redirecting to /admin');
+      const adminDashboardUrl = new URL('/admin', request.url);
+      return NextResponse.redirect(adminDashboardUrl);
+    }
+  }
+
+  // 2. Intercept all protected /admin routes (except /admin/login)
   if (pathname.startsWith('/admin') && pathname !== '/admin/login') {
     const adminToken = request.cookies.get('angel_admin_session')?.value;
     const isValid = await verifyAdminToken(adminToken || '');
+    console.log(`🔒 [AUTH PROXY] Route: ${pathname} | Admin session valid: ${isValid}`);
+
     if (!isValid) {
+      console.log(`🔒 [AUTH PROXY] Unauthenticated access attempt to ${pathname} -> Redirecting to /admin/login`);
       const loginUrl = new URL('/admin/login', request.url);
       return NextResponse.redirect(loginUrl);
     }
   }
 
-  // Intercept protected customer routes: /checkout, /payment, /orders, /account
+  // 3. Intercept protected customer routes: /checkout, /payment, /orders, /account
   const protectedRoutes = ['/checkout', '/payment', '/orders', '/account'];
   const isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route));
 
