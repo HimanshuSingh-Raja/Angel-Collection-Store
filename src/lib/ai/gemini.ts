@@ -5,9 +5,6 @@ import { z } from 'zod';
  * Supported Models: gemini-1.5-flash, gemini-2.0-flash, gemini-1.5-pro
  */
 
-const rawKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-const GEMINI_API_KEY = rawKey.trim().replace(/^["']|["']$/g, '');
-
 export interface GeminiProductAnalysisInput {
   images?: string[];
   titleHint?: string;
@@ -326,34 +323,35 @@ Output ONLY a JSON object matching this schema:
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
       };
+
+      let requestUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
       if (apiKey.startsWith('AQ.') || apiKey.startsWith('ya29.')) {
         headers['Authorization'] = `Bearer ${apiKey}`;
+        requestUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
+      } else {
+        headers['x-goog-api-key'] = apiKey;
       }
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: requestParts,
-              },
-            ],
-            generationConfig: {
-              temperature: 0.2,
-              topK: 32,
-              topP: 1,
-              maxOutputTokens: 2048,
-              responseMimeType: 'application/json',
+      const response = await fetch(requestUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: requestParts,
             },
-          }),
-        }
-      );
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            topK: 32,
+            topP: 1,
+            maxOutputTokens: 2048,
+            responseMimeType: 'application/json',
+          },
+        }),
+      });
 
       if (!response.ok) {
         const errText = await response.text();
