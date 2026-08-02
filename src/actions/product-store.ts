@@ -11,6 +11,7 @@ export async function getStorefrontProductsAction(query?: {
   minPrice?: number;
   maxPrice?: number;
 }) {
+  const startTime = Date.now();
   try {
     const categorySlug = query?.category?.toLowerCase().trim();
     const typeSlug = (query?.type || query?.subcategory)?.toLowerCase().trim();
@@ -73,13 +74,39 @@ export async function getStorefrontProductsAction(query?: {
     const products = await prisma.product.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      include: {
-        category: true,
-        subcategory: true,
-        brand: true,
-        images: { orderBy: { position: 'asc' } },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        sku: true,
+        description: true,
+        shortDescription: true,
+        price: true,
+        compareAtPrice: true,
+        stock: true,
+        isFeatured: true,
+        isNewArrival: true,
+        isTrending: true,
+        tags: true,
+        createdAt: true,
+        category: {
+          select: { id: true, name: true, slug: true },
+        },
+        subcategory: {
+          select: { id: true, name: true, slug: true },
+        },
+        brand: {
+          select: { id: true, name: true, slug: true },
+        },
+        images: {
+          orderBy: { position: 'asc' },
+          select: { id: true, url: true, isPrimary: true },
+        },
       },
     });
+
+    const duration = Date.now() - startTime;
+    console.log(`⏱️ [DB STOREFRONT] Products query: ${duration}ms (returned ${products.length} products)`);
 
     return products.map((p) => ({
       id: p.id,
@@ -112,6 +139,7 @@ export async function getStorefrontProductsAction(query?: {
 
 export async function getProductBySlugAction(slug: string) {
   if (!slug) return null;
+  const startTime = Date.now();
 
   try {
     const p = await prisma.product.findFirst({
@@ -119,13 +147,40 @@ export async function getProductBySlugAction(slug: string) {
         slug: slug,
         status: 'PUBLISHED',
       },
-      include: {
-        category: true,
-        subcategory: true,
-        brand: true,
-        images: { orderBy: { position: 'asc' } },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        sku: true,
+        description: true,
+        shortDescription: true,
+        price: true,
+        compareAtPrice: true,
+        stock: true,
+        lowStockThreshold: true,
+        isFeatured: true,
+        isNewArrival: true,
+        isTrending: true,
+        tags: true,
+        createdAt: true,
+        category: {
+          select: { id: true, name: true, slug: true },
+        },
+        subcategory: {
+          select: { id: true, name: true, slug: true },
+        },
+        brand: {
+          select: { id: true, name: true, slug: true },
+        },
+        images: {
+          orderBy: { position: 'asc' },
+          select: { id: true, url: true, isPrimary: true },
+        },
       },
     });
+
+    const duration = Date.now() - startTime;
+    console.log(`⏱️ [DB STOREFRONT] Single Product query (${slug}): ${duration}ms`);
 
     if (!p) return null;
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { subscribeAuthState, logoutFirebase } from '@/lib/firebase/auth';
 import { syncFirebaseUserAction } from '@/actions/user';
@@ -10,36 +10,47 @@ export function useFirebaseAuth() {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const lastSyncedUid = useRef<string | null>(null);
 
   useEffect(() => {
+    const startTime = Date.now();
+
     const unsubscribe = subscribeAuthState(async (user) => {
       setFirebaseUser(user);
+
       if (user && user.email) {
-        try {
-          // Sync Firebase User with Prisma DB via Server Action
-          const syncedUser = await syncFirebaseUserAction({
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            photoURL: user.photoURL,
-          });
-          setUserProfile(syncedUser);
-        } catch (e) {
-          console.error('Failed to sync Firebase user with Prisma DB:', e);
-          setUserProfile({
-            id: user.uid,
-            name: user.displayName || 'Angel Client',
-            email: user.email,
-            role: 'CUSTOMER',
-            avatar: user.photoURL || undefined,
-            isActive: true,
-            createdAt: new Date().toISOString(),
-          });
+        // Only trigger DB sync if UID has changed
+        if (lastSyncedUid.current !== user.uid) {
+          lastSyncedUid.current = user.uid;
+          try {
+            const syncedUser = await syncFirebaseUserAction({
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName,
+              photoURL: user.photoURL,
+            });
+            setUserProfile(syncedUser);
+          } catch (e) {
+            console.error('Failed to sync Firebase user with Prisma DB:', e);
+            setUserProfile({
+              id: user.uid,
+              name: user.displayName || 'Angel Client',
+              email: user.email,
+              role: 'CUSTOMER',
+              avatar: user.photoURL || undefined,
+              isActive: true,
+              createdAt: new Date().toISOString(),
+            });
+          }
         }
       } else {
+        lastSyncedUid.current = null;
         setUserProfile(null);
       }
+
       setLoading(false);
+      const duration = Date.now() - startTime;
+      console.log(`⏱️ [AUTH INIT] Auth initialization: ${duration}ms`);
     });
 
     return () => unsubscribe();

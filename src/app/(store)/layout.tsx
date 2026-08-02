@@ -1,10 +1,12 @@
 'use client';
 
 import React from 'react';
+import dynamic from 'next/dynamic';
 import { Header } from '@/components/store/Header';
 import { Footer } from '@/components/store/Footer';
-import { CartDrawer } from '@/components/store/CartDrawer';
-import { LiveChatWidget } from '@/components/store/LiveChatWidget';
+
+const CartDrawer = dynamic(() => import('@/components/store/CartDrawer').then((m) => m.CartDrawer), { ssr: false });
+const LiveChatWidget = dynamic(() => import('@/components/store/LiveChatWidget').then((m) => m.LiveChatWidget), { ssr: false });
 
 export default function StoreLayout({ children }: { children: React.ReactNode }) {
   return (

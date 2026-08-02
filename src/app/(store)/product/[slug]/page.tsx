@@ -29,6 +29,7 @@ import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { formatPrice, calculateDiscountPercentage } from '@/lib/utils';
 import { getProductBySlugAction } from '@/actions/product-store';
+import { checkPincodeDelivery } from '@/lib/pincode-cache';
 
 export default function ProductDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = use(params);
@@ -135,17 +136,16 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
     router.push('/checkout');
   };
 
-  const checkPincode = (e: React.FormEvent) => {
+  const checkPincode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pincode || pincode.length < 6) {
       setDeliveryStatus('Please enter a valid 6-digit PIN code');
       return;
     }
     setCheckingPincode(true);
-    setTimeout(() => {
-      setCheckingPincode(false);
-      setDeliveryStatus(`Express delivery available to ${pincode} by tomorrow!`);
-    }, 500);
+    const res = await checkPincodeDelivery(pincode);
+    setCheckingPincode(false);
+    setDeliveryStatus(res.message);
   };
 
   return (

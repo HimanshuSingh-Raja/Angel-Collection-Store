@@ -20,8 +20,15 @@ function ShopContent() {
   const initialType = searchParams?.get('type') || searchParams?.get('subcategory') || '';
   const initialSale = searchParams?.get('onSale') === 'true';
 
-  const [productsList, setProductsList] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [productsList, setProductsList] = useState<Product[]>(() => {
+    return (INITIAL_PRODUCTS as any[]).filter((p) => {
+      if (initialCat && p.category?.slug !== initialCat && p.category?.name?.toLowerCase() !== initialCat.toLowerCase()) {
+        return false;
+      }
+      return true;
+    });
+  });
+  const [loading, setLoading] = useState(false);
 
   const [filters, setFilters] = useState<FilterState>({
     category: initialCat,
@@ -56,7 +63,7 @@ function ShopContent() {
   // Fetch live published products from database or fallback to mock
   useEffect(() => {
     async function loadLiveProducts() {
-      setLoading(true);
+      const startTime = Date.now();
       try {
         const dbProducts = await getStorefrontProductsAction({
           category: filters.category || undefined,
@@ -65,36 +72,11 @@ function ShopContent() {
           search: filters.searchQuery || undefined,
         });
 
+        const duration = Date.now() - startTime;
+        console.log(`⏱️ [SHOP PAGE] Product catalog load duration: ${duration}ms`);
+
         if (dbProducts && dbProducts.length > 0) {
           setProductsList(dbProducts as any);
-        } else {
-          const filteredMock = (INITIAL_PRODUCTS as any[]).filter((p) => {
-            if (filters.category && p.category?.slug !== filters.category && p.category?.name?.toLowerCase() !== filters.category.toLowerCase()) {
-              return false;
-            }
-            if (filters.subcategory) {
-              const typeTerm = filters.subcategory.toLowerCase().trim();
-              const singularTerm = typeTerm.endsWith('s') ? typeTerm.slice(0, -1) : typeTerm;
-              const subcatSlug = p.subcategory?.slug?.toLowerCase();
-              const subcatName = p.subcategory?.name?.toLowerCase();
-              const titleLower = p.title.toLowerCase();
-              const tagLower = p.tags?.toLowerCase() || '';
-
-              const isMatch =
-                subcatSlug === typeTerm ||
-                subcatSlug === singularTerm ||
-                subcatName?.includes(typeTerm) ||
-                subcatName?.includes(singularTerm) ||
-                titleLower.includes(typeTerm) ||
-                titleLower.includes(singularTerm) ||
-                tagLower.includes(typeTerm) ||
-                tagLower.includes(singularTerm);
-
-              if (!isMatch) return false;
-            }
-            return true;
-          });
-          setProductsList(filteredMock as any);
         }
       } catch (err) {
         console.error('Failed to load products:', err);
