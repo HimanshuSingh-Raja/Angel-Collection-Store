@@ -5,7 +5,8 @@ import { z } from 'zod';
  * Model: gemini-1.5-flash
  */
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const rawKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+const GEMINI_API_KEY = rawKey.trim().replace(/^["']|["']$/g, '');
 
 export interface GeminiProductAnalysisInput {
   images?: string[];
@@ -246,7 +247,8 @@ export function normalizeGeminiResponse(rawResponse: any, input: GeminiProductAn
 export async function generateProductListingWithGemini(
   input: GeminiProductAnalysisInput
 ): Promise<GeminiProductAnalysisResult> {
-  const apiKey = GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+  const rawKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+  const apiKey = rawKey.trim().replace(/^["']|["']$/g, '');
 
   if (!input.images || input.images.length === 0) {
     throw new Error('No product image provided. Please upload a product image first to let AI analyze it visually.');
