@@ -321,7 +321,7 @@ Output ONLY a JSON object matching this schema:
 }`;
 
   if (!apiKey || apiKey.includes('YOUR_API_KEY')) {
-    throw new Error('Gemini API key is missing. Please create a new Gemini API key at aistudio.google.com/app/apikey (starts with AIzaSy) and add it to Vercel Environment Variables as GEMINI_API_KEY.');
+    throw new Error('Gemini API key is missing. Please create a new Gemini API key at aistudio.google.com/app/apikey and add it to Vercel Environment Variables as GEMINI_API_KEY.');
   }
 
   const candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
@@ -333,11 +333,20 @@ Output ONLY a JSON object matching this schema:
 
       const requestParts: any[] = [...imageParts, { text: prompt }];
 
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      };
+
+      if (apiKey.startsWith('AQ.') || apiKey.startsWith('ya29.')) {
+        headers['Authorization'] = `Bearer ${apiKey}`;
+      }
+
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             contents: [
               {
@@ -359,8 +368,8 @@ Output ONLY a JSON object matching this schema:
         const errText = await response.text();
         console.warn(`⚠️ [GEMINI VISION WARN] Model ${modelName} returned HTTP ${response.status}:`, errText.slice(0, 150));
         lastError = errText;
-        if (response.status === 400 && errText.includes('API key not valid')) {
-          throw new Error('Gemini API Key is invalid. Please create a new Gemini API key at aistudio.google.com/app/apikey (starting with AIzaSy) and paste it into Vercel Environment Variables as GEMINI_API_KEY.');
+        if (response.status === 400 && (errText.includes('API key not valid') || errText.includes('INVALID_ARGUMENT'))) {
+          throw new Error('Google returned API key error. In Google AI Studio (aistudio.google.com), when creating an API Key, click "+ Create API key in new project" to get a valid REST API Key.');
         }
         continue;
       }
@@ -381,7 +390,7 @@ Output ONLY a JSON object matching this schema:
 
       return normalizeGeminiResponse(parsedData, input);
     } catch (modelErr: any) {
-      if (modelErr?.message?.includes('Gemini API Key is invalid') || modelErr?.message?.includes('missing')) {
+      if (modelErr?.message?.includes('Google returned API key error') || modelErr?.message?.includes('missing')) {
         throw modelErr;
       }
       console.warn(`⚠️ [GEMINI VISION WARN] ${modelName} failed:`, modelErr?.message);
