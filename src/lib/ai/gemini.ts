@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 /**
  * Enterprise Google Gemini Multimodal Vision Integration Service
- * Model: gemini-1.5-flash
+ * Supported Models: gemini-1.5-flash, gemini-2.0-flash, gemini-1.5-pro
  */
 
 const rawKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
@@ -321,60 +321,73 @@ Output ONLY a JSON object matching this schema:
 }`;
 
   if (!apiKey || apiKey.includes('YOUR_API_KEY')) {
-    throw new Error('Gemini API key is not configured. Please add GEMINI_API_KEY to your environment variables.');
+    throw new Error('Gemini API key is missing. Please create a new Gemini API key at aistudio.google.com/app/apikey (starts with AIzaSy) and add it to Vercel Environment Variables as GEMINI_API_KEY.');
   }
 
-  try {
-    console.log('✨ [GEMINI VISION] Sending Multimodal Request to Google Gemini API (gemini-1.5-flash)...');
+  const candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+  let lastError = '';
 
-    // Combine Image parts AND text prompt part
-    const requestParts: any[] = [...imageParts, { text: prompt }];
+  for (const modelName of candidateModels) {
+    try {
+      console.log(`✨ [GEMINI VISION] Trying Google Gemini model (${modelName})...`);
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: requestParts,
+      const requestParts: any[] = [...imageParts, { text: prompt }];
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: requestParts,
+              },
+            ],
+            generationConfig: {
+              temperature: 0.2,
+              topK: 32,
+              topP: 1,
+              maxOutputTokens: 2048,
+              responseMimeType: 'application/json',
             },
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            topK: 32,
-            topP: 1,
-            maxOutputTokens: 2048,
-            responseMimeType: 'application/json',
-          },
-        }),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.warn(`⚠️ [GEMINI VISION WARN] Model ${modelName} returned HTTP ${response.status}:`, errText.slice(0, 150));
+        lastError = errText;
+        if (response.status === 400 && errText.includes('API key not valid')) {
+          throw new Error('Gemini API Key is invalid. Please create a new Gemini API key at aistudio.google.com/app/apikey (starting with AIzaSy) and paste it into Vercel Environment Variables as GEMINI_API_KEY.');
+        }
+        continue;
       }
-    );
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('❌ [GEMINI VISION ERROR]:', response.status, errText);
-      throw new Error(`Gemini API returned error HTTP ${response.status}: ${errText.slice(0, 200)}`);
+      const data = await response.json();
+      const rawContent = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      console.log(`🔍 [GEMINI VISION RAW RESPONSE (${modelName})]:`, rawContent.slice(0, 300));
+
+      const cleanJsonString = rawContent
+        .replace(/```json/g, '')
+        .replace(/```/g, '')
+        .trim();
+
+      const parsedData = JSON.parse(cleanJsonString);
+
+      console.log(`✅ [GEMINI VISION SUCCESS (${modelName})] Detected Product Type: "${parsedData.productType}" | Category: "${parsedData.category}" | Subcategory: "${parsedData.subcategory}"`);
+
+      return normalizeGeminiResponse(parsedData, input);
+    } catch (modelErr: any) {
+      if (modelErr?.message?.includes('Gemini API Key is invalid') || modelErr?.message?.includes('missing')) {
+        throw modelErr;
+      }
+      console.warn(`⚠️ [GEMINI VISION WARN] ${modelName} failed:`, modelErr?.message);
     }
-
-    const data = await response.json();
-    const rawContent = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    console.log('🔍 [GEMINI VISION RAW RESPONSE]:', rawContent.slice(0, 300));
-
-    const cleanJsonString = rawContent
-      .replace(/```json/g, '')
-      .replace(/```/g, '')
-      .trim();
-
-    const parsedData = JSON.parse(cleanJsonString);
-
-    console.log(`✅ [GEMINI VISION SUCCESS] Detected Product Type: "${parsedData.productType}" | Category: "${parsedData.category}" | Subcategory: "${parsedData.subcategory}"`);
-
-    return normalizeGeminiResponse(parsedData, input);
-  } catch (error: any) {
-    console.error('❌ [GEMINI VISION EXCEPTION]:', error);
-    throw new Error(error?.message || 'Unable to analyze this product image. Please try another image or enter details manually.');
   }
+
+  console.error('❌ [GEMINI VISION ALL MODELS FAILED]:', lastError);
+  throw new Error('Unable to analyze this product image. Please verify your GEMINI_API_KEY in Vercel Environment Variables or enter details manually.');
 }
