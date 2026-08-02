@@ -164,9 +164,18 @@ export default function NewProductPage() {
 
   // Real Gemini AI Assistant Call
   const handleAiGenerate = async () => {
+    if (!images || images.length === 0) {
+      alert('Please upload at least 1 product image first so the AI can inspect the garment visually.');
+      return;
+    }
+
     setAiGenerating(true);
     try {
-      console.log('🤖 Invoking Gemini API via /api/admin/ai/product...');
+      console.log(`📸 [DEV LOG STEP 1] Image selected count: ${images.length}`);
+      console.log(`📸 [DEV LOG STEP 2] Image 1 MIME/Prefix: ${images[0]?.slice(0, 40)}`);
+      console.log(`📸 [DEV LOG STEP 3] Total image data size: ${images.reduce((acc, img) => acc + (img?.length || 0), 0)} chars`);
+      console.log('🤖 [DEV LOG STEP 4 & 5] Invoking Gemini API via /api/admin/ai/product...');
+
       const response = await fetch('/api/admin/ai/product', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -178,20 +187,56 @@ export default function NewProductPage() {
       });
 
       const result = await response.json();
+      console.log('🔍 [DEV LOG STEP 6] Raw API Result:', result);
+
       if (result.success && result.data) {
         const data = result.data;
+        console.log(`✅ [DEV LOG STEP 7] Parsed Product Classification -> Type: "${data.productType}" | Category: "${data.category}" | Subcategory: "${data.subcategory}"`);
         setAiAnalysis(data);
+
+        // Smart Category Matching
+        let targetCatId = form.categoryId;
+        let targetSubcatId = form.subcategoryId;
+
+        const catLower = (data.category || '').toLowerCase();
+        const typeLower = (data.productType || '').toLowerCase();
+        const matchedCat = INITIAL_CATEGORIES.find(
+          (c) =>
+            c.name.toLowerCase().includes(catLower) ||
+            c.slug.toLowerCase().includes(catLower) ||
+            catLower.includes(c.slug.toLowerCase()) ||
+            c.name.toLowerCase().includes(typeLower)
+        );
+
+        if (matchedCat) {
+          targetCatId = matchedCat.id;
+          const subLower = (data.subcategory || '').toLowerCase();
+          const matchedSubcat = matchedCat.subcategories?.find(
+            (s) =>
+              s.name.toLowerCase().includes(subLower) ||
+              s.slug.toLowerCase().includes(subLower) ||
+              subLower.includes(s.slug.toLowerCase()) ||
+              s.name.toLowerCase().includes(typeLower)
+          );
+          if (matchedSubcat) {
+            targetSubcatId = matchedSubcat.id;
+          }
+        }
+
+        console.log(`✨ [DEV LOG STEP 8] Form Autofill -> CatId: "${targetCatId}", SubcatId: "${targetSubcatId}"`);
 
         setForm((prev) => ({
           ...prev,
           title: prev.title || data.title,
           slug: prev.slug || data.slug,
           sku: prev.sku || data.sku,
+          categoryId: targetCatId,
+          subcategoryId: targetSubcatId,
           shortDescription: prev.shortDescription || data.shortDescription,
           description: prev.description || data.description,
-          price: prev.price || (data.suggestedPrices?.price ? data.suggestedPrices.price.toString() : '21999'),
-          compareAtPrice: prev.compareAtPrice || (data.suggestedPrices?.compareAtPrice ? data.suggestedPrices.compareAtPrice.toString() : '28999'),
-          costPrice: prev.costPrice || (data.suggestedPrices?.costPrice ? data.suggestedPrices.costPrice.toString() : '9500'),
+          price: prev.price || (data.suggestedPrices?.price ? data.suggestedPrices.price.toString() : ''),
+          compareAtPrice: prev.compareAtPrice || (data.suggestedPrices?.compareAtPrice ? data.suggestedPrices.compareAtPrice.toString() : ''),
+          costPrice: prev.costPrice || (data.suggestedPrices?.costPrice ? data.suggestedPrices.costPrice.toString() : ''),
           seoTitle: prev.seoTitle || data.seoTitle,
           seoDescription: prev.seoDescription || data.metaDescription,
           metaKeywords: prev.metaKeywords || (Array.isArray(data.tags) ? data.tags.join(', ') : data.tags),
@@ -200,22 +245,20 @@ export default function NewProductPage() {
         if (data.specifications) {
           setSpecs((prev) => ({
             ...prev,
-            fabric: data.specifications.fabric || prev.fabric,
-            work: data.specifications.work || prev.work,
-            pattern: data.specifications.pattern || prev.pattern,
-            occasion: data.specifications.occasion || prev.occasion,
-            fit: data.specifications.fit || prev.fit,
+            fabric: data.specifications.fabric || data.fabric || prev.fabric,
+            work: data.specifications.work || data.printOrWork || prev.work,
+            pattern: data.specifications.pattern || data.pattern || prev.pattern,
+            occasion: data.specifications.occasion || (Array.isArray(data.occasion) ? data.occasion.join(', ') : data.occasion) || prev.occasion,
+            fit: data.specifications.fit || data.fit || prev.fit,
             transparency: data.specifications.transparency || prev.transparency,
-            care: data.specifications.care || data.careInstructions || 'Professional Dry Clean Only',
-
           }));
         }
       } else {
-        alert(result.error || 'AI generation failed. Please try again.');
+        alert(result.error || 'Unable to analyze this product image. Please try another image or enter the details manually.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Gemini AI Auto Generate Exception:', error);
-      alert('AI generation failed. Please try again.');
+      alert(error?.message || 'Unable to analyze this product image. Please try another image or enter the details manually.');
     } finally {
       setAiGenerating(false);
     }

@@ -159,24 +159,30 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
 
     setAiGenerating(true);
     try {
+      console.log(`📸 [EDIT PAGE DEV LOG] Image count: ${images.length}`);
       const response = await fetch('/api/admin/ai/product', {
         method: 'POST',
-        headers: { 'Content-[#Type]': 'application/json' },
-        body: JSON.stringify({ images: images.map((img) => img.url), currentTitle: title }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: images.map((img) => img.url), titleHint: title }),
       });
-      const data = await response.json();
+      const result = await response.json();
+      console.log('🔍 [EDIT PAGE DEV LOG] API Result:', result);
 
-      if (data.success && data.result) {
-        const ai = data.result;
+      if (result.success && result.data) {
+        const ai = result.data;
+        console.log(`✅ [EDIT PAGE DEV LOG] Classified Type: "${ai.productType}", Cat: "${ai.category}"`);
         setTitle(ai.title || title);
         setDescription(ai.description || description);
         setTags(ai.tags || tags);
         setSeoTitle(ai.seoTitle || seoTitle);
-        setSeoDescription(ai.seoDescription || seoDescription);
+        setSeoDescription(ai.metaDescription || ai.seoDescription || seoDescription);
         setIsDirty(true);
+      } else {
+        alert(result.error || 'Unable to analyze this product image. Please try another image or enter the details manually.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('AI Auto Generate failed:', err);
+      alert(err?.message || 'Unable to analyze this product image. Please try another image or enter details manually.');
     } finally {
       setAiGenerating(false);
     }
