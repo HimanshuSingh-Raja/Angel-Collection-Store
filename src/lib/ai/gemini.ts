@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
 /**
- * Enterprise Google Gemini Developer API Multimodal Integration Service
- * Standard REST API Key Authentication ONLY (process.env.GEMINI_API_KEY)
- * NO OAuth2 / NO Bearer tokens / NO Client-Side Exposure
+ * Enterprise Google Gemini Multimodal Vision Integration Service
+ * Standard Gemini Developer API Key Authentication ONLY (process.env.GEMINI_API_KEY)
+ * SERVER-SIDE ONLY - NO OAuth2 / NO Bearer headers / NO Client Exposure
  */
 
 export interface GeminiProductAnalysisInput {
@@ -14,7 +14,6 @@ export interface GeminiProductAnalysisInput {
 }
 
 export interface GeminiProductAnalysisResult {
-  // Primary requested JSON fields
   productTitle: string;
   shortSummary: string;
   detailedDescription: string;
@@ -23,14 +22,14 @@ export interface GeminiProductAnalysisResult {
   color: string;
   material: string;
   pattern: string;
-  occasion: string;
+  occasion: string[];
   style: string;
   seoTitle: string;
   seoDescription: string;
   seoKeywords: string[];
   imageAltText: string;
 
-  // Form Autofill Backwards-Compatibility Fields
+  // Backwards compatibility fields for form autofill
   title: string;
   description: string;
   shortDescription: string;
@@ -76,14 +75,14 @@ export const GeminiResponseSchema = z.object({
   color: z.string().optional().default(''),
   material: z.string().optional().default(''),
   pattern: z.string().optional().default(''),
-  occasion: z.string().optional().default(''),
+  occasion: z.array(z.string()).optional().default([]),
   style: z.string().optional().default(''),
   seoTitle: z.string().optional().default(''),
   seoDescription: z.string().optional().default(''),
   seoKeywords: z.array(z.string()).optional().default([]),
   imageAltText: z.string().optional().default(''),
 
-  // Fallback / legacy schema compatibility
+  // Compatibility fields
   productType: z.string().optional().default('Uncategorized'),
   title: z.string().optional().default(''),
   description: z.string().optional().default(''),
@@ -110,7 +109,7 @@ export const GeminiResponseSchema = z.object({
 });
 
 /**
- * Converts image payloads into Gemini inline_data format with base64 data & mime_type
+ * Extracts raw Base64 data and MIME type from Data URI or HTTP URL
  */
 async function prepareImageParts(images: string[]): Promise<Array<{ inline_data: { mime_type: string; data: string } }>> {
   const parts: Array<{ inline_data: { mime_type: string; data: string } }> = [];
@@ -119,17 +118,17 @@ async function prepareImageParts(images: string[]): Promise<Array<{ inline_data:
     if (!imgStr) continue;
 
     try {
-      // 1. Data URI format (data:image/jpeg;base64,...)
+      // 1. Data URI format (data:image/jpeg;base64,AAAA...)
       if (imgStr.startsWith('data:')) {
         const matches = imgStr.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
         if (matches && matches.length === 3) {
           const mimeType = matches[1];
-          const base64Data = matches[2];
-          console.log(`📸 [GEMINI IMAGE PREP] Base64 Data URI parsed -> MIME: ${mimeType}, Length: ${base64Data.length} chars`);
+          const rawBase64 = matches[2];
+          console.log(`📸 [IMAGE LOG] MIME type: ${mimeType} | Base64 character length: ${rawBase64.length}`);
           parts.push({
             inline_data: {
               mime_type: mimeType,
-              data: base64Data,
+              data: rawBase64,
             },
           });
           continue;
@@ -138,35 +137,36 @@ async function prepareImageParts(images: string[]): Promise<Array<{ inline_data:
 
       // 2. Remote HTTP/HTTPS URL
       if (imgStr.startsWith('http://') || imgStr.startsWith('https://')) {
-        console.log(`🌐 [GEMINI IMAGE PREP] Fetching remote image URL: ${imgStr.slice(0, 60)}...`);
+        console.log(`🌐 [IMAGE LOG] Fetching remote URL: ${imgStr.slice(0, 50)}...`);
         const res = await fetch(imgStr, { headers: { 'User-Agent': 'Mozilla/5.0' } });
         if (res.ok) {
           const arrayBuffer = await res.arrayBuffer();
           const buffer = Buffer.from(arrayBuffer);
           const mimeType = (res.headers.get('content-type') || 'image/jpeg').split(';')[0];
-          const base64Data = buffer.toString('base64');
-          console.log(`📸 [GEMINI IMAGE PREP] Fetched Remote Image -> MIME: ${mimeType}, Size: ${buffer.length} bytes`);
+          const rawBase64 = buffer.toString('base64');
+          console.log(`📸 [IMAGE LOG] Fetched Remote URL -> MIME type: ${mimeType} | Size: ${buffer.length} bytes`);
           parts.push({
             inline_data: {
               mime_type: mimeType,
-              data: base64Data,
+              data: rawBase64,
             },
           });
           continue;
         }
       }
 
-      // 3. Raw Base64 String Fallback
+      // 3. Raw Base64 string fallback
       if (imgStr.length > 100) {
+        console.log(`📸 [IMAGE LOG] Raw Base64 fallback -> MIME type: image/jpeg | Length: ${imgStr.length}`);
         parts.push({
           inline_data: {
             mime_type: 'image/jpeg',
-            data: imgStr,
+            data: imgStr.replace(/^data:image\/[a-zA-Z+]+;base64,/, ''),
           },
         });
       }
     } catch (err) {
-      console.error('❌ [GEMINI IMAGE PROCESSING ERROR] Failed to process image part:', err);
+      console.error('❌ [IMAGE PROCESSING ERROR]:', err);
     }
   }
 
@@ -190,16 +190,16 @@ export function normalizeGeminiResponse(rawResponse: any, input: GeminiProductAn
     category: category,
     subcategory: subcategory,
     color: parsed.color || 'Multicolor',
-    material: parsed.material || parsed.fabric || 'Premium Quality Fabric',
-    pattern: parsed.pattern || 'Designer',
-    occasion: parsed.occasion || 'Festive & Special Occasions',
+    material: parsed.material || parsed.fabric || 'Premium Quality Material',
+    pattern: parsed.pattern || parsed.printOrWork || 'Designer',
+    occasion: Array.isArray(parsed.occasion) && parsed.occasion.length > 0 ? parsed.occasion : ['Festive', 'Wedding'],
     style: parsed.style || 'Luxury Atelier',
     seoTitle: parsed.seoTitle || `${title} | Angel Collection`,
     seoDescription: parsed.seoDescription || shortDescription.slice(0, 150),
     seoKeywords: parsed.seoKeywords && parsed.seoKeywords.length > 0 ? parsed.seoKeywords : [prodType.toLowerCase(), category.toLowerCase(), 'luxury fashion'],
     imageAltText: parsed.imageAltText || `${title} - Angel Collection`,
 
-    // Legacy form mappings
+    // Compatibility fields for form populate
     title: title,
     description: description,
     shortDescription: shortDescription,
@@ -216,7 +216,7 @@ export function normalizeGeminiResponse(rawResponse: any, input: GeminiProductAn
     specifications: parsed.specifications || {
       fabric: parsed.material || parsed.fabric || 'Premium Quality Material',
       pattern: parsed.pattern || 'Designer',
-      occasion: parsed.occasion || 'Festive',
+      occasion: (Array.isArray(parsed.occasion) ? parsed.occasion.join(', ') : parsed.occasion) || 'Festive',
       care: parsed.careInstructions || 'Dry Clean Only',
     },
     confidence: parsed.confidence || 90,
@@ -227,7 +227,7 @@ export function normalizeGeminiResponse(rawResponse: any, input: GeminiProductAn
       fabric: parsed.material || parsed.fabric || 'Premium Quality Material',
       work: parsed.pattern || parsed.printOrWork || 'Artisanal Work',
       pattern: parsed.pattern || 'Designer',
-      occasion: parsed.occasion || 'Festive',
+      occasion: (Array.isArray(parsed.occasion) ? parsed.occasion.join(', ') : parsed.occasion) || 'Festive',
       fit: parsed.fit || 'Regular Fit',
       care: parsed.careInstructions || 'Dry Clean Only',
       countryOfOrigin: 'India',
@@ -241,68 +241,54 @@ export function normalizeGeminiResponse(rawResponse: any, input: GeminiProductAn
 export async function generateProductListingWithGemini(
   input: GeminiProductAnalysisInput
 ): Promise<GeminiProductAnalysisResult> {
-  // Strictly SERVER-SIDE ONLY environment variable (No NEXT_PUBLIC_ in response)
-  let apiKey = (process.env.GEMINI_API_KEY || '').trim().replace(/^["']|["']$/g, '');
-  if (!apiKey || apiKey.startsWith('AQ.')) {
-    apiKey = (process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '').trim().replace(/^["']|["']$/g, '');
-  }
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+
+  console.log('GEMINI_API_KEY configured:', Boolean(apiKey));
 
   if (!apiKey) {
-    console.error('❌ [GEMINI SERVER LOG] missing API key: GEMINI_API_KEY is not defined in process.env');
-    throw new Error('GEMINI_API_KEY is not configured on the server.');
+    throw new Error('GEMINI_API_KEY is not defined in server environment variables.');
   }
-
-  // 1. Convert uploaded product image(s) into Gemini inline_data format
-  const imageParts = await prepareImageParts(input.images || []);
-
-  if (imageParts.length === 0) {
-    console.warn('⚠️ [GEMINI SERVER LOG] image processing warning: No valid image parts could be extracted.');
-  } else {
-    console.log(`📸 [GEMINI SERVER LOG] Successfully prepared ${imageParts.length} image part(s) for visual analysis.`);
-  }
-
-  // 2. Structured Prompt for Multimodal Analysis
-  const prompt = `You are a Senior Merchandise Classifier and Luxury Fashion Director for "Angel Collection".
-
-INSTRUCTIONS:
-1. Visually inspect the attached product image.
-2. Accurately identify the exact garment or fashion item shown (e.g., Lehenga, Kurti / Kurta Set, Salwar Suit, Anarkali, Gown, Saree, Western Dress, Co-ord Set, Top, Shirt, Jeans, Trousers, Skirt, Dupatta, Blouse, Fine Jewellery, Handbag, Footwear, etc.).
-3. Do NOT classify an item as "Saree" unless the image clearly shows a traditional 6-yard or 9-yard saree drape with pallu!
-4. Extract color, fabric/material, embroidery/pattern, occasion, and design style.
-
-${input.titleHint ? `Title Hint: "${input.titleHint}"` : ''}
-${input.categoryHint ? `Category Hint: "${input.categoryHint}"` : ''}
-${input.notes ? `Notes: "${input.notes}"` : ''}
-
-Output ONLY a single valid JSON object matching this exact schema:
-{
-  "productTitle": "Compelling luxury product title",
-  "shortSummary": "1-2 sentence compelling summary",
-  "detailedDescription": "Comprehensive product description covering silhouette, craftsmanship, embellishments, and styling",
-  "category": "Main category (e.g. Women, Men, Bags, Jewellery, Kids, Accessories)",
-  "subcategory": "Specific subcategory (e.g. Bridal Lehengas, Designer Kurtis, Evening Gowns, Leather Totes)",
-  "color": "Primary color visible in image",
-  "material": "Detected fabric or material",
-  "pattern": "Detected pattern or embroidery work",
-  "occasion": "Suitable occasions (e.g. Wedding, Festive, Evening Gala, Casual)",
-  "style": "Styling aesthetic",
-  "seoTitle": "SEO title for product page",
-  "seoDescription": "Meta description under 160 characters",
-  "seoKeywords": ["keyword1", "keyword2", "keyword3"],
-  "imageAltText": "Descriptive alt text for accessibility"
-}`;
 
   // Candidate supported multimodal models
   const candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
   let lastErrorMsg = '';
 
+  // 1. Prepare image parts
+  const imageParts = await prepareImageParts(input.images || []);
+  console.log(`🖼️ [IMAGE LOG] Total image parts prepared: ${imageParts.length}`);
+
+  // 2. Structured Multimodal Prompt
+  const prompt = `You are a Senior Merchandise Director and Product Classifier for "Angel Collection".
+
+INSTRUCTIONS:
+1. Visually inspect the attached product image.
+2. Accurately determine what exact product is visible in the image (e.g. Lehenga, Kurti / Kurta Set, Salwar Suit, Anarkali, Gown, Saree, Western Dress, Co-ord Set, Top, Shirt, Jeans, Trousers, Skirt, Dupatta, Blouse, Fine Jewellery, Handbag, Footwear, etc.).
+3. Do NOT classify a garment as "Saree" unless the image clearly shows a traditional 6-yard or 9-yard saree drape with pallu!
+4. Output STRICT valid JSON matching this schema:
+{
+  "productTitle": "Compelling luxury product title",
+  "shortSummary": "1-2 sentence summary of product",
+  "detailedDescription": "Comprehensive description highlighting silhouette, craftsmanship, embellishments, and styling",
+  "category": "Main category (e.g. Women, Men, Bags, Jewellery, Kids, Accessories)",
+  "subcategory": "Specific subcategory (e.g. Bridal Lehengas, Designer Kurtis, Evening Gowns, Leather Totes)",
+  "color": "Primary color visible in image",
+  "material": "Detected fabric/material",
+  "pattern": "Detected pattern/embroidery",
+  "occasion": ["Wedding", "Festive"],
+  "style": "Styling aesthetic",
+  "seoTitle": "SEO title for product page",
+  "seoDescription": "Meta description under 160 characters",
+  "seoKeywords": ["keyword1", "keyword2"],
+  "imageAltText": "Descriptive alt text for image"
+}`;
+
   for (const modelName of candidateModels) {
     try {
-      console.log(`🤖 [GEMINI SERVER LOG] Model try: Testing candidate model "${modelName}"...`);
+      console.log(`Gemini model: ${modelName}`);
 
       const requestParts: any[] = [...imageParts, { text: prompt }];
 
-      // Official Google Gemini Developer API REST Endpoint with ?key=${apiKey}
+      // Official Google Gemini Developer REST API call (API Key in query param)
       const requestUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
       const response = await fetch(requestUrl, {
@@ -328,33 +314,38 @@ Output ONLY a single valid JSON object matching this exact schema:
 
       if (!response.ok) {
         const errText = await response.text();
-        lastErrorMsg = errText;
-        console.error(`GEMINI REAL ERROR [${modelName} HTTP ${response.status}]:`, errText);
+        lastErrorMsg = `HTTP ${response.status} ${response.statusText}: ${errText}`;
+        console.error(`===== GEMINI MODEL CALL ERROR [${modelName}] =====`);
+        console.error(`HTTP Status: ${response.status} ${response.statusText}`);
+        console.error(`Error Body:`, errText.slice(0, 300));
         continue;
       }
 
       const data = await response.json();
       const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-      console.log(`🔍 [GEMINI SERVER LOG] Raw Gemini Response snippet (${modelName}):`, rawText.slice(0, 200));
+      console.log(`🔍 [GEMINI SERVER LOG] Raw Response snippet (${modelName}):`, rawText.slice(0, 200));
 
       let parsedJson: any = {};
       try {
         const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
         parsedJson = JSON.parse(cleanJson);
-      } catch (parseErr: any) {
-        console.error('GEMINI REAL ERROR [JSON Parse Failed]:', parseErr?.message || parseErr);
+      } catch (parseErr) {
+        console.error('===== GEMINI JSON PARSE ERROR =====');
+        console.error(parseErr);
         throw new Error('Malformed JSON returned from Gemini.');
       }
 
-      console.log(`✅ [GEMINI SERVER LOG] success: Visual analysis complete! Category: "${parsedJson.category || parsedJson.productType}"`);
+      console.log(`✅ [GEMINI SERVER LOG] Visual analysis success! Product: "${parsedJson.productTitle || parsedJson.title}" | Category: "${parsedJson.category}"`);
 
       return normalizeGeminiResponse(parsedJson, input);
     } catch (modelError: any) {
-      console.error(`GEMINI REAL ERROR [${modelName} Exception]:`, modelError?.message || modelError);
+      console.error(`===== GEMINI MODEL EXECUTION EXCEPTION [${modelName}] =====`);
+      console.error(modelError);
     }
   }
 
-  console.error('GEMINI REAL ERROR [ALL MODELS FAILED]:', lastErrorMsg);
-  throw new Error(`Gemini API call failed: ${lastErrorMsg.slice(0, 150)}`);
+  console.error('===== GEMINI PRODUCT ANALYSIS ERROR =====');
+  console.error(new Error(`All candidate models failed. Last error: ${lastErrorMsg}`));
+  throw new Error(`Gemini API execution failed.`);
 }

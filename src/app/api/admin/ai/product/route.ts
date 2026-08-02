@@ -11,17 +11,18 @@ export async function POST(request: Request) {
     try {
       body = await request.json();
     } catch (parseError: any) {
-      console.error('❌ [/api/admin/ai/product] GEMINI REAL ERROR - Request Body Parse Failed:', parseError);
+      console.error('===== GEMINI PRODUCT ANALYSIS ERROR =====');
+      console.error('Failed to parse request JSON body:', parseError);
       return NextResponse.json(
-        { success: false, error: 'Invalid request body. Image payload may be too large.' },
+        { success: false, error: 'AI analysis failed. Please try again.' },
         { status: 400 }
       );
     }
 
     const { images, titleHint, categoryHint, notes } = body || {};
 
-    console.log('🤖 [/api/admin/ai/product] Processing Gemini Multimodal AI Request...');
-    console.log('🖼️ [/api/admin/ai/product] Images received count:', Array.isArray(images) ? images.length : 0);
+    console.log('GEMINI_API_KEY configured:', Boolean(process.env.GEMINI_API_KEY));
+    console.log('🤖 [/api/admin/ai/product] Request received. Image count:', Array.isArray(images) ? images.length : 0);
 
     if (!images || !Array.isArray(images) || images.length === 0 || !images[0]) {
       return NextResponse.json(
@@ -42,19 +43,17 @@ export async function POST(request: Request) {
       notes,
     });
 
-    console.log(`✅ [/api/admin/ai/product] Gemini Analysis Complete -> Title: "${result.productTitle}" | Category: "${result.category}" | Subcategory: "${result.subcategory}"`);
+    console.log(`✅ [/api/admin/ai/product] Success -> Title: "${result.productTitle}" | Category: "${result.category}"`);
 
     return NextResponse.json({ success: true, data: result });
   } catch (error: any) {
-    console.error('GEMINI REAL ERROR:', error);
-    console.error('GEMINI ERROR DETAILS:', {
-      name: error?.name,
-      message: error?.message,
-      status: error?.status,
-      statusText: error?.statusText,
-      cause: error?.cause,
-      stack: error?.stack ? error.stack.slice(0, 400) : undefined,
-    });
+    console.error('===== GEMINI PRODUCT ANALYSIS ERROR =====');
+    console.error(error);
+    console.error('Error Name:', error?.name);
+    console.error('Error Message:', error?.message);
+    console.error('Error Status:', error?.status);
+    console.error('Error StatusText:', error?.statusText);
+    console.error('Error Cause:', error?.cause);
 
     return NextResponse.json(
       { success: false, error: 'AI analysis failed. Please try again.' },
