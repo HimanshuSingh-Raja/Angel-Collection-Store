@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
 /**
- * Enterprise Google Gemini Multimodal Vision Integration Service
- * Standard Gemini Developer API Key Authentication ONLY (process.env.GEMINI_API_KEY)
- * SERVER-SIDE ONLY - NO OAuth2 / NO Bearer headers / NO Client Exposure
+ * Enterprise Google Gemini Developer API Multimodal Service
+ * Authenticated via x-goog-api-key header using process.env.GEMINI_API_KEY
+ * NO OAuth2 / NO Bearer headers / NO Client-Side Exposure
  */
 
 export interface GeminiProductAnalysisInput {
@@ -29,7 +29,7 @@ export interface GeminiProductAnalysisResult {
   seoKeywords: string[];
   imageAltText: string;
 
-  // Backwards compatibility fields for form autofill
+  // Compatibility fields for form autofill
   title: string;
   description: string;
   shortDescription: string;
@@ -82,7 +82,7 @@ export const GeminiResponseSchema = z.object({
   seoKeywords: z.array(z.string()).optional().default([]),
   imageAltText: z.string().optional().default(''),
 
-  // Compatibility fields
+  // Form autofill fallback compatibility
   productType: z.string().optional().default('Uncategorized'),
   title: z.string().optional().default(''),
   description: z.string().optional().default(''),
@@ -109,7 +109,7 @@ export const GeminiResponseSchema = z.object({
 });
 
 /**
- * Extracts raw Base64 data and MIME type from Data URI or HTTP URL
+ * Extracts raw Base64 data (without data URL prefix) and MIME type
  */
 async function prepareImageParts(images: string[]): Promise<Array<{ inline_data: { mime_type: string; data: string } }>> {
   const parts: Array<{ inline_data: { mime_type: string; data: string } }> = [];
@@ -123,12 +123,12 @@ async function prepareImageParts(images: string[]): Promise<Array<{ inline_data:
         const matches = imgStr.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
         if (matches && matches.length === 3) {
           const mimeType = matches[1];
-          const rawBase64 = matches[2];
-          console.log(`📸 [IMAGE LOG] MIME type: ${mimeType} | Base64 character length: ${rawBase64.length}`);
+          const rawBase64WithoutPrefix = matches[2];
+          console.log(`📸 [IMAGE LOG] Extracted MIME: ${mimeType} | Base64 Length: ${rawBase64WithoutPrefix.length} chars`);
           parts.push({
             inline_data: {
               mime_type: mimeType,
-              data: rawBase64,
+              data: rawBase64WithoutPrefix,
             },
           });
           continue;
@@ -143,12 +143,12 @@ async function prepareImageParts(images: string[]): Promise<Array<{ inline_data:
           const arrayBuffer = await res.arrayBuffer();
           const buffer = Buffer.from(arrayBuffer);
           const mimeType = (res.headers.get('content-type') || 'image/jpeg').split(';')[0];
-          const rawBase64 = buffer.toString('base64');
-          console.log(`📸 [IMAGE LOG] Fetched Remote URL -> MIME type: ${mimeType} | Size: ${buffer.length} bytes`);
+          const rawBase64WithoutPrefix = buffer.toString('base64');
+          console.log(`📸 [IMAGE LOG] Fetched Remote URL -> MIME: ${mimeType} | Size: ${buffer.length} bytes`);
           parts.push({
             inline_data: {
               mime_type: mimeType,
-              data: rawBase64,
+              data: rawBase64WithoutPrefix,
             },
           });
           continue;
@@ -157,11 +157,12 @@ async function prepareImageParts(images: string[]): Promise<Array<{ inline_data:
 
       // 3. Raw Base64 string fallback
       if (imgStr.length > 100) {
-        console.log(`📸 [IMAGE LOG] Raw Base64 fallback -> MIME type: image/jpeg | Length: ${imgStr.length}`);
+        const rawBase64 = imgStr.replace(/^data:image\/[a-zA-Z+]+;base64,/, '');
+        console.log(`📸 [IMAGE LOG] Raw Base64 fallback -> MIME: image/jpeg | Length: ${rawBase64.length}`);
         parts.push({
           inline_data: {
             mime_type: 'image/jpeg',
-            data: imgStr.replace(/^data:image\/[a-zA-Z+]+;base64,/, ''),
+            data: rawBase64,
           },
         });
       }
@@ -238,26 +239,69 @@ export function normalizeGeminiResponse(rawResponse: any, input: GeminiProductAn
   };
 }
 
+export async function testGeminiTextSanity(apiKey: string, modelName: string): Promise<boolean> {
+  try {
+    console.log(`🤖 [SANITY TEST] Testing text-only prompt on model ${modelName} via x-goog-api-key...`);
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: 'Reply exactly: GEMINI_OK' }] }],
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      console.log(`✅ [SANITY TEST SUCCESS] Response from ${modelName}: "${text.trim()}"`);
+      return true;
+    } else {
+      const errText = await res.text();
+      console.warn(`⚠️ [SANITY TEST FAILED] Model ${modelName} HTTP ${res.status}: ${errText.slice(0, 200)}`);
+      return false;
+    }
+  } catch (err: any) {
+    console.warn(`⚠️ [SANITY TEST EXCEPTION] Model ${modelName}:`, err?.message);
+    return false;
+  }
+}
+
 export async function generateProductListingWithGemini(
   input: GeminiProductAnalysisInput
 ): Promise<GeminiProductAnalysisResult> {
+  // Read key SERVER-SIDE ONLY
   const apiKey = (process.env.GEMINI_API_KEY || '').trim().replace(/^["']|["']$/g, '');
 
   console.log('GEMINI_API_KEY configured:', Boolean(apiKey));
 
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not defined in server environment variables.');
+    throw new Error('GEMINI_API_KEY is not defined in process.env');
   }
 
-  // Candidate supported multimodal models
+  // Supported multimodal models under generativelanguage.googleapis.com
   const candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
   let lastErrorMsg = '';
 
-  // 1. Prepare image parts
+  // Step 10: Run Text Sanity Check First
+  let validatedModel = '';
+  for (const modelName of candidateModels) {
+    const passedSanity = await testGeminiTextSanity(apiKey, modelName);
+    if (passedSanity) {
+      validatedModel = modelName;
+      break;
+    }
+  }
+
+  const activeModels = validatedModel ? [validatedModel, ...candidateModels.filter((m) => m !== validatedModel)] : candidateModels;
+
+  // Step 11: Prepare Image Parts
   const imageParts = await prepareImageParts(input.images || []);
   console.log(`🖼️ [IMAGE LOG] Total image parts prepared: ${imageParts.length}`);
 
-  // 2. Structured Multimodal Prompt
+  // Step 12: Multimodal Product Prompt
   const prompt = `You are a Senior Merchandise Director and Product Classifier for "Angel Collection".
 
 INSTRUCTIONS:
@@ -282,19 +326,20 @@ INSTRUCTIONS:
   "imageAltText": "Descriptive alt text for image"
 }`;
 
-  for (const modelName of candidateModels) {
+  for (const modelName of activeModels) {
     try {
       console.log(`Gemini model: ${modelName}`);
 
       const requestParts: any[] = [...imageParts, { text: prompt }];
 
-      // Official Google Gemini Developer REST API call (API Key in query param)
-      const requestUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      // Official Gemini Developer API REST Request authenticated via x-goog-api-key header
+      const requestUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
 
       const response = await fetch(requestUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
         },
         body: JSON.stringify({
           contents: [
