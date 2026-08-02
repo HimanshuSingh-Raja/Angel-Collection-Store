@@ -82,6 +82,10 @@ export async function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
+export async function middleware(request: NextRequest) {
+  return proxy(request);
+}
+
 export const config = {
   matcher: ['/admin/:path*', '/checkout/:path*', '/payment/:path*', '/orders/:path*', '/account/:path*'],
 };
