@@ -329,16 +329,7 @@ Output ONLY a single valid JSON object matching this exact schema:
       if (!response.ok) {
         const errText = await response.text();
         lastErrorMsg = errText;
-
-        if (response.status === 400 && errText.includes('API key not valid')) {
-          console.error(`❌ [GEMINI SERVER LOG] invalid API key: HTTP 400 - ${errText.slice(0, 200)}`);
-        } else if (response.status === 429) {
-          console.error(`❌ [GEMINI SERVER LOG] quota/rate limit: HTTP 429 - ${errText.slice(0, 200)}`);
-        } else if (response.status === 404) {
-          console.warn(`⚠️ [GEMINI SERVER LOG] unsupported model: Model ${modelName} returned 404 - ${errText.slice(0, 150)}`);
-        } else {
-          console.warn(`⚠️ [GEMINI SERVER LOG] API Error on ${modelName} HTTP ${response.status}: ${errText.slice(0, 150)}`);
-        }
+        console.error(`GEMINI REAL ERROR [${modelName} HTTP ${response.status}]:`, errText);
         continue;
       }
 
@@ -351,8 +342,8 @@ Output ONLY a single valid JSON object matching this exact schema:
       try {
         const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
         parsedJson = JSON.parse(cleanJson);
-      } catch (parseErr) {
-        console.error('❌ [GEMINI SERVER LOG] malformed Gemini response: Failed to parse JSON response:', parseErr);
+      } catch (parseErr: any) {
+        console.error('GEMINI REAL ERROR [JSON Parse Failed]:', parseErr?.message || parseErr);
         throw new Error('Malformed JSON returned from Gemini.');
       }
 
@@ -360,10 +351,10 @@ Output ONLY a single valid JSON object matching this exact schema:
 
       return normalizeGeminiResponse(parsedJson, input);
     } catch (modelError: any) {
-      console.warn(`⚠️ [GEMINI SERVER LOG] Model ${modelName} failed:`, modelError?.message);
+      console.error(`GEMINI REAL ERROR [${modelName} Exception]:`, modelError?.message || modelError);
     }
   }
 
-  console.error('❌ [GEMINI SERVER LOG] ALL MODELS FAILED. Last Error:', lastErrorMsg);
-  throw new Error('Gemini API call failed.');
+  console.error('GEMINI REAL ERROR [ALL MODELS FAILED]:', lastErrorMsg);
+  throw new Error(`Gemini API call failed: ${lastErrorMsg.slice(0, 150)}`);
 }
