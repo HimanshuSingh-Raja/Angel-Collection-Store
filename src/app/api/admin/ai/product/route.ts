@@ -16,12 +16,10 @@ export async function POST(request: Request) {
       );
     }
 
-    if (process.env.NODE_ENV === 'development') {
-      const firstImg = images[0];
-      const isDataUri = firstImg.startsWith('data:');
-      const isUrl = firstImg.startsWith('http');
-      console.log(`🔍 [DEV LOG] Image 1 Type: ${isDataUri ? 'Data URI (base64)' : isUrl ? 'HTTP URL' : 'Raw String'}, Length: ${firstImg.length} chars`);
-    }
+    const firstImg = images[0];
+    const isDataUri = firstImg.startsWith('data:');
+    const isUrl = firstImg.startsWith('http');
+    console.log(`🔍 [/api/admin/ai/product SERVER LOG] Image 1 Format: ${isDataUri ? 'Base64 Data URI' : isUrl ? 'HTTP URL' : 'Raw String'}, Payload Length: ${firstImg.length} chars`);
 
     const result = await generateProductListingWithGemini({
       images,
@@ -30,13 +28,13 @@ export async function POST(request: Request) {
       notes,
     });
 
-    console.log(`✅ [/api/admin/ai/product] Classification -> Type: "${result.productType}" | Cat: "${result.category}" | Subcat: "${result.subcategory}"`);
+    console.log(`✅ [/api/admin/ai/product SERVER LOG] Gemini Analysis Complete -> Title: "${result.productTitle}" | Category: "${result.category}" | Subcategory: "${result.subcategory}"`);
 
     return NextResponse.json({ success: true, data: result });
   } catch (error: any) {
-    console.error('❌ [/api/admin/ai/product] Exception:', error);
+    console.error('❌ [/api/admin/ai/product SERVER LOG EXCEPTION]:', error);
     return NextResponse.json(
-      { success: false, error: error?.message || 'Unable to analyze this product image. Please try another image or enter the details manually.' },
+      { success: false, error: 'AI analysis failed. Please try again.' },
       { status: 500 }
     );
   }

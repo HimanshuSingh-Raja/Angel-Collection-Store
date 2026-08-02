@@ -254,11 +254,11 @@ export default function NewProductPage() {
           }));
         }
       } else {
-        alert(result.error || 'Unable to analyze this product image. Please try another image or enter the details manually.');
+        alert(result.error || 'AI analysis failed. Please try again.');
       }
     } catch (error: any) {
       console.error('Gemini AI Auto Generate Exception:', error);
-      alert(error?.message || 'Unable to analyze this product image. Please try another image or enter the details manually.');
+      alert('AI analysis failed. Please try again.');
     } finally {
       setAiGenerating(false);
     }

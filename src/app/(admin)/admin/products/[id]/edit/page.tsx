@@ -178,11 +178,11 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         setSeoDescription(ai.metaDescription || ai.seoDescription || seoDescription);
         setIsDirty(true);
       } else {
-        alert(result.error || 'Unable to analyze this product image. Please try another image or enter the details manually.');
+        alert(result.error || 'AI analysis failed. Please try again.');
       }
     } catch (err: any) {
       console.error('AI Auto Generate failed:', err);
-      alert(err?.message || 'Unable to analyze this product image. Please try another image or enter details manually.');
+      alert('AI analysis failed. Please try again.');
     } finally {
       setAiGenerating(false);
     }
