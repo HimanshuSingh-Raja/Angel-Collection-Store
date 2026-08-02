@@ -149,11 +149,12 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   // AI Auto Generate Handler
   const handleAiAutoGenerate = async () => {
     if (images.length === 0) {
-      alert('Please upload at least one product image before running AI auto generation.');
+      alert('Please upload a product image first.');
       return;
     }
 
-    if (isDirty && !confirm('✨ AI Auto Generate will update the title, description, and SEO tags. Proceed?')) {
+    if (!title || !title.trim()) {
+      alert('Please enter a Product Title so AI can understand the product.');
       return;
     }
 
@@ -163,19 +164,20 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       const response = await fetch('/api/admin/ai/product', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images: images.map((img) => img.url), titleHint: title }),
+        body: JSON.stringify({ images: images.map((img) => img.url), titleHint: title.trim() }),
       });
       const result = await response.json();
       console.log('🔍 [EDIT PAGE DEV LOG] API Result:', result);
 
       if (result.success && result.data) {
         const ai = result.data;
-        console.log(`✅ [EDIT PAGE DEV LOG] Classified Type: "${ai.productType}", Cat: "${ai.category}"`);
-        setTitle(ai.title || title);
-        setDescription(ai.description || description);
-        setTags(ai.tags || tags);
-        setSeoTitle(ai.seoTitle || seoTitle);
-        setSeoDescription(ai.metaDescription || ai.seoDescription || seoDescription);
+        console.log(`✅ [EDIT PAGE DEV LOG] Classified Category: "${ai.category}", Subcategory: "${ai.subcategory}"`);
+        // PRESERVE ADMIN'S ORIGINAL PRODUCT TITLE — NEVER OVERWRITE
+        setDescription(ai.detailedDescription || ai.description || description);
+        setShortDescription(ai.shortSummary || ai.shortDescription || shortDescription);
+        setTags(ai.seoKeywords || ai.tags || tags);
+        setSeoTitle(ai.seoTitle || `${title.trim()} | Angel Collection`);
+        setSeoDescription(ai.seoDescription || ai.metaDescription || seoDescription);
         setIsDirty(true);
       } else {
         alert(result.error || 'AI analysis failed. Please try again.');

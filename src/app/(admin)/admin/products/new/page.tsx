@@ -165,7 +165,12 @@ export default function NewProductPage() {
   // Real Gemini AI Assistant Call
   const handleAiGenerate = async () => {
     if (!images || images.length === 0) {
-      alert('Please upload at least 1 product image first so the AI can inspect the garment visually.');
+      alert('Please upload a product image first.');
+      return;
+    }
+
+    if (!form.title || !form.title.trim()) {
+      alert('Please enter a Product Title so AI can understand the product.');
       return;
     }
 
@@ -173,7 +178,7 @@ export default function NewProductPage() {
     try {
       console.log(`📸 [DEV LOG STEP 1] Image selected count: ${images.length}`);
       console.log(`📸 [DEV LOG STEP 2] Image 1 MIME/Prefix: ${images[0]?.slice(0, 40)}`);
-      console.log(`📸 [DEV LOG STEP 3] Total image data size: ${images.reduce((acc, img) => acc + (img?.length || 0), 0)} chars`);
+      console.log(`📝 [DEV LOG STEP 3] Admin Provided Product Title Context: "${form.title.trim()}"`);
       console.log('🤖 [DEV LOG STEP 4 & 5] Invoking Gemini API via /api/admin/ai/product...');
 
       const response = await fetch('/api/admin/ai/product', {
@@ -181,7 +186,7 @@ export default function NewProductPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           images,
-          titleHint: form.title,
+          titleHint: form.title.trim(),
           categoryHint: form.categoryId,
         }),
       });
@@ -191,7 +196,7 @@ export default function NewProductPage() {
 
       if (result.success && result.data) {
         const data = result.data;
-        console.log(`✅ [DEV LOG STEP 7] Parsed Product Classification -> Type: "${data.productType}" | Category: "${data.category}" | Subcategory: "${data.subcategory}"`);
+        console.log(`✅ [DEV LOG STEP 7] Parsed Product Classification -> Category: "${data.category}" | Subcategory: "${data.subcategory}" | Color: "${data.color}"`);
         setAiAnalysis(data);
 
         // Smart Category Matching
@@ -223,34 +228,32 @@ export default function NewProductPage() {
           }
         }
 
-        console.log(`✨ [DEV LOG STEP 8] Form Autofill -> CatId: "${targetCatId}", SubcatId: "${targetSubcatId}"`);
-
         setForm((prev) => ({
           ...prev,
-          title: prev.title || data.title,
-          slug: prev.slug || data.slug,
+          // PRESERVE ADMIN'S ORIGINAL PRODUCT TITLE — NEVER OVERWRITE
+          title: prev.title,
+          slug: prev.slug || data.slug || prev.title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, ''),
           sku: prev.sku || data.sku,
           categoryId: targetCatId,
           subcategoryId: targetSubcatId,
-          shortDescription: prev.shortDescription || data.shortDescription,
-          description: prev.description || data.description,
+          shortDescription: prev.shortDescription || data.shortSummary || data.shortDescription,
+          description: prev.description || data.detailedDescription || data.description,
           price: prev.price || (data.suggestedPrices?.price ? data.suggestedPrices.price.toString() : ''),
           compareAtPrice: prev.compareAtPrice || (data.suggestedPrices?.compareAtPrice ? data.suggestedPrices.compareAtPrice.toString() : ''),
           costPrice: prev.costPrice || (data.suggestedPrices?.costPrice ? data.suggestedPrices.costPrice.toString() : ''),
-          seoTitle: prev.seoTitle || data.seoTitle,
-          seoDescription: prev.seoDescription || data.metaDescription,
-          metaKeywords: prev.metaKeywords || (Array.isArray(data.tags) ? data.tags.join(', ') : data.tags),
+          seoTitle: prev.seoTitle || data.seoTitle || `${prev.title} | Angel Collection`,
+          seoDescription: prev.seoDescription || data.seoDescription || data.metaDescription,
+          metaKeywords: prev.metaKeywords || (Array.isArray(data.seoKeywords) ? data.seoKeywords.join(', ') : Array.isArray(data.tags) ? data.tags.join(', ') : data.tags),
         }));
 
-        if (data.specifications) {
+        if (data.specifications || data.material || data.pattern) {
           setSpecs((prev) => ({
             ...prev,
-            fabric: data.specifications.fabric || data.fabric || prev.fabric,
-            work: data.specifications.work || data.printOrWork || prev.work,
-            pattern: data.specifications.pattern || data.pattern || prev.pattern,
-            occasion: data.specifications.occasion || (Array.isArray(data.occasion) ? data.occasion.join(', ') : data.occasion) || prev.occasion,
-            fit: data.specifications.fit || data.fit || prev.fit,
-            transparency: data.specifications.transparency || prev.transparency,
+            fabric: data.material || data.fabric || prev.fabric,
+            work: data.pattern || data.printOrWork || prev.work,
+            pattern: data.pattern || prev.pattern,
+            occasion: (Array.isArray(data.occasion) ? data.occasion.join(', ') : data.occasion) || prev.occasion,
+            fit: data.fit || prev.fit,
           }));
         }
       } else {
@@ -782,14 +785,15 @@ export default function NewProductPage() {
                   AI VISION INSIGHTS
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-mono font-bold text-[10px]">
-                  {aiAnalysis.confidence || aiAnalysis.aiConfidence || 95}% CONFIDENCE
+                  {aiAnalysis.confidence || 92}% CONFIDENCE
                 </span>
               </div>
 
-              <div className="text-xs space-y-1 pt-1">
-                <p><strong>Fabric Detected:</strong> {aiAnalysis.detectedAttributes?.fabric || aiAnalysis.fabric || '100% Pure Organza Silk'}</p>
-                <p><strong>Work / Embroidery:</strong> {aiAnalysis.detectedAttributes?.work || aiAnalysis.specifications?.work || 'Hand-Embroidered Zardozi & Resham Threads'}</p>
-                <p><strong>Category:</strong> {aiAnalysis.detectedAttributes?.category || aiAnalysis.category || 'Sarees'}</p>
+              <div className="text-xs space-y-1.5 pt-1">
+                <p><strong>Product:</strong> {form.title || aiAnalysis.productTitle}</p>
+                <p><strong>Primary Color:</strong> {aiAnalysis.color || 'Identified from Image'}</p>
+                <p><strong>Work / Embroidery:</strong> {aiAnalysis.pattern || aiAnalysis.printOrWork || aiAnalysis.material || 'Artisanal Detailing'}</p>
+                <p><strong>Category:</strong> {aiAnalysis.category || 'Apparel'}</p>
               </div>
             </div>
           )}
