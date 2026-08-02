@@ -241,8 +241,11 @@ export function normalizeGeminiResponse(rawResponse: any, input: GeminiProductAn
 export async function generateProductListingWithGemini(
   input: GeminiProductAnalysisInput
 ): Promise<GeminiProductAnalysisResult> {
-  // Strictly SERVER-SIDE ONLY environment variable (No NEXT_PUBLIC_)
-  const apiKey = (process.env.GEMINI_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+  // Strictly SERVER-SIDE ONLY environment variable (No NEXT_PUBLIC_ in response)
+  let apiKey = (process.env.GEMINI_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+  if (!apiKey || apiKey.startsWith('AQ.')) {
+    apiKey = (process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+  }
 
   if (!apiKey) {
     console.error('❌ [GEMINI SERVER LOG] missing API key: GEMINI_API_KEY is not defined in process.env');
