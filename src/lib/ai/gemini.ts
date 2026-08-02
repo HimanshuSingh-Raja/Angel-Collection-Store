@@ -160,7 +160,7 @@ async function prepareImageParts(images: string[]): Promise<Array<{ inline_data:
       // 2. HTTP/HTTPS URL
       if (imgStr.startsWith('http://') || imgStr.startsWith('https://')) {
         console.log(`🌐 [GEMINI VISION PREP] Fetching remote image URL: ${imgStr.slice(0, 60)}...`);
-        const res = await fetch(imgStr);
+        const res = await fetch(imgStr, { headers: { 'User-Agent': 'Mozilla/5.0' } });
         if (res.ok) {
           const arrayBuffer = await res.arrayBuffer();
           const buffer = Buffer.from(arrayBuffer);
@@ -260,16 +260,8 @@ export async function generateProductListingWithGemini(
 ): Promise<GeminiProductAnalysisResult> {
   const apiKey = getEffectiveApiKey();
 
-  if (!input.images || input.images.length === 0) {
-    throw new Error('No product image provided. Please upload a product image first to let AI analyze it visually.');
-  }
-
   // 1. Prepare Multimodal Image Parts for Gemini Vision
-  const imageParts = await prepareImageParts(input.images);
-
-  if (imageParts.length === 0) {
-    throw new Error('Unable to process the uploaded image file format. Please upload a JPEG, PNG, or WEBP image.');
-  }
+  const imageParts = await prepareImageParts(input.images || []);
 
   console.log(`🤖 [GEMINI VISION] Prepared ${imageParts.length} image part(s) for Multimodal Vision Analysis.`);
 
@@ -277,8 +269,8 @@ export async function generateProductListingWithGemini(
   const prompt = `You are a Senior Fashion Director and Merchandise Classifier for "Angel Collection".
 
 CRITICAL INSTRUCTIONS:
-1. Carefully inspect the attached product image.
-2. FIRST determine what exact garment or item is shown in the image (e.g. Lehenga, Kurti / Kurta Set, Salwar Suit, Anarkali, Gown, Saree, Western Dress, Co-ord Set, Top, Shirt, Jeans, Trousers, Skirt, Dupatta, Blouse, Fine Jewellery, Handbag, Footwear, etc.).
+1. Inspect the product image or details provided.
+2. FIRST determine what exact garment or item is shown (e.g. Lehenga, Kurti / Kurta Set, Salwar Suit, Anarkali, Gown, Saree, Western Dress, Co-ord Set, Top, Shirt, Jeans, Trousers, Skirt, Dupatta, Blouse, Fine Jewellery, Handbag, Footwear, etc.).
 3. Do NOT classify a garment as "Saree" unless the image clearly shows a traditional 6-yard or 9-yard saree drape with pallu!
 4. If the item is a Lehenga, set productType to "Lehenga" and category to "Women" or "Ethnic Wear".
 5. If the item is a Kurti or Kurta Set, set productType to "Kurta Set" and category to "Women" or "Ethnic Wear".
@@ -402,5 +394,5 @@ Output ONLY a JSON object matching this schema:
   }
 
   console.error('❌ [GEMINI VISION ALL MODELS FAILED]:', lastError);
-  throw new Error('Unable to analyze this product image. Please verify your GEMINI_API_KEY in Vercel Environment Variables or enter details manually.');
+  throw new Error('Unable to analyze this product image. Please try another image file or enter details manually.');
 }
