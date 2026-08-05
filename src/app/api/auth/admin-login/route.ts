@@ -3,24 +3,26 @@ import { cookies } from 'next/headers';
 import { db } from '@/lib/db';
 import { generateAdminSessionToken, verifyAdminSessionToken } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const cookieStore = await cookies();
     const adminToken = cookieStore.get('angel_admin_session')?.value;
 
     if (!adminToken) {
-      return NextResponse.json({ authenticated: false }, { status: 401 });
+      return NextResponse.json({ authenticated: false }, { status: 401, headers: { 'Cache-Control': 'no-store, max-age=0' } });
     }
 
     const { valid, role } = verifyAdminSessionToken(adminToken);
 
     if (valid) {
-      return NextResponse.json({ authenticated: true, role });
+      return NextResponse.json({ authenticated: true, role }, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
     }
 
-    return NextResponse.json({ authenticated: false }, { status: 401 });
+    return NextResponse.json({ authenticated: false }, { status: 401, headers: { 'Cache-Control': 'no-store, max-age=0' } });
   } catch (error) {
-    return NextResponse.json({ authenticated: false }, { status: 500 });
+    return NextResponse.json({ authenticated: false }, { status: 500, headers: { 'Cache-Control': 'no-store, max-age=0' } });
   }
 }
 

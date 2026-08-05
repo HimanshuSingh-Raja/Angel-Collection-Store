@@ -7,7 +7,8 @@
 export async function verifyAdminSessionTokenEdge(token: string): Promise<{ valid: boolean; userId?: string; role?: string }> {
   if (!token) return { valid: false };
   try {
-    const parts = token.split(':');
+    const cleanToken = token.trim().replace(/^["']|["']$/g, '');
+    const parts = cleanToken.split(':');
     if (parts.length !== 4) return { valid: false };
     const [userId, role, timestampStr, receivedHmac] = parts;
 
@@ -15,6 +16,10 @@ export async function verifyAdminSessionTokenEdge(token: string): Promise<{ vali
     const timestamp = parseInt(timestampStr, 10);
     const maxAgeMs = 30 * 24 * 60 * 60 * 1000;
     if (isNaN(timestamp) || Date.now() - timestamp > maxAgeMs) {
+      return { valid: false };
+    }
+
+    if (!['OWNER', 'ADMIN', 'MANAGER', 'STAFF'].includes(role)) {
       return { valid: false };
     }
 

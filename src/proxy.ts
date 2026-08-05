@@ -1,63 +1,16 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-
-async function verifyAdminToken(token: string): Promise<boolean> {
-  if (!token) return false;
-  try {
-    const parts = token.split(':');
-    if (parts.length !== 4) return false;
-    const [userId, role, timestampStr, receivedHmac] = parts;
-
-    const timestamp = parseInt(timestampStr, 10);
-    const maxAgeMs = 30 * 24 * 60 * 60 * 1000; // 30 Days Session Expiry
-    if (isNaN(timestamp) || Date.now() - timestamp > maxAgeMs) {
-      return false;
-    }
-
-    if (!['OWNER', 'ADMIN', 'MANAGER', 'STAFF'].includes(role)) {
-      return false;
-    }
-
-    const secret = process.env.ADMIN_SECRET_KEY || process.env.NEXTAUTH_SECRET || 'angel-secure-crypto-fallback-key-2026';
-    const payload = `${userId}:${role}:${timestampStr}`;
-
-    const encoder = new TextEncoder();
-    const keyData = encoder.encode(secret);
-    const messageData = encoder.encode(payload);
-
-    const cryptoKey = await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-
-    const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
-    const expectedHmac = Array.from(new Uint8Array(signature))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-
-    if (expectedHmac.length !== receivedHmac.length) return false;
-    let diff = 0;
-    for (let i = 0; i < expectedHmac.length; i++) {
-      diff |= expectedHmac.charCodeAt(i) ^ receivedHmac.charCodeAt(i);
-    }
-
-    return diff === 0;
-  } catch {
-    return false;
-  }
-}
+import { verifyAdminSessionTokenEdge } from '@/lib/auth-token';
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const cleanPath = pathname.endsWith('/') && pathname.length > 1 ? pathname.slice(0, -1) : pathname;
 
   // 1. Check if user is accessing /admin/login while ALREADY authenticated
-  if (pathname === '/admin/login') {
+  if (cleanPath === '/admin/login') {
     const adminToken = request.cookies.get('angel_admin_session')?.value;
-    const isValid = await verifyAdminToken(adminToken || '');
-    if (isValid) {
+    const { valid } = await verifyAdminSessionTokenEdge(adminToken || '');
+    if (valid) {
       console.log('🔒 [AUTH PROXY] Authenticated session detected on /admin/login -> Redirecting to /admin');
       const adminDashboardUrl = new URL('/admin', request.url);
       return NextResponse.redirect(adminDashboardUrl);
@@ -65,13 +18,13 @@ export async function proxy(request: NextRequest) {
   }
 
   // 2. Intercept all protected /admin routes (except /admin/login)
-  if (pathname.startsWith('/admin') && pathname !== '/admin/login') {
+  if (cleanPath.startsWith('/admin') && cleanPath !== '/admin/login') {
     const adminToken = request.cookies.get('angel_admin_session')?.value;
-    const isValid = await verifyAdminToken(adminToken || '');
-    console.log(`🔒 [AUTH PROXY] Route: ${pathname} | Admin session valid: ${isValid}`);
+    const { valid } = await verifyAdminSessionTokenEdge(adminToken || '');
+    console.log(`🔒 [AUTH PROXY] Route: ${cleanPath} | Admin session valid: ${valid}`);
 
-    if (!isValid) {
-      console.log(`🔒 [AUTH PROXY] Unauthenticated access attempt to ${pathname} -> Redirecting to /admin/login`);
+    if (!valid) {
+      console.log(`🔒 [AUTH PROXY] Unauthenticated access attempt to ${cleanPath} -> Redirecting to /admin/login`);
       const loginUrl = new URL('/admin/login', request.url);
       return NextResponse.redirect(loginUrl);
     }
@@ -79,7 +32,7 @@ export async function proxy(request: NextRequest) {
 
   // 3. Intercept protected customer routes: /checkout, /payment, /orders, /account
   const protectedRoutes = ['/checkout', '/payment', '/orders', '/account'];
-  const isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route));
+  const isProtectedRoute = protectedRoutes.some((route) => cleanPath.startsWith(route));
 
   if (isProtectedRoute) {
     const userSession =
@@ -88,7 +41,7 @@ export async function proxy(request: NextRequest) {
       request.cookies.get('__Secure-next-auth.session-token')?.value;
 
     if (!userSession) {
-      const loginUrl = new URL(`/login?redirect=${encodeURIComponent(pathname)}`, request.url);
+      const loginUrl = new URL(`/login?redirect=${encodeURIComponent(cleanPath)}`, request.url);
       return NextResponse.redirect(loginUrl);
     }
   }
@@ -101,5 +54,16 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/checkout/:path*', '/payment/:path*', '/orders/:path*', '/account/:path*'],
+  matcher: [
+    '/admin',
+    '/admin/:path*',
+    '/checkout',
+    '/checkout/:path*',
+    '/payment',
+    '/payment/:path*',
+    '/orders',
+    '/orders/:path*',
+    '/account',
+    '/account/:path*',
+  ],
 };

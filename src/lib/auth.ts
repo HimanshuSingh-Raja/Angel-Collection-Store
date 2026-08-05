@@ -16,13 +16,21 @@ export function generateAdminSessionToken(userId: string, role: string): string 
 export function verifyAdminSessionToken(token: string): { valid: boolean; userId?: string; role?: string } {
   if (!token) return { valid: false };
   try {
-    const parts = token.split(':');
+    const cleanToken = token.trim().replace(/^["']|["']$/g, '');
+    const parts = cleanToken.split(':');
     if (parts.length !== 4) return { valid: false };
     const [userId, role, timestampStr, receivedHmac] = parts;
+
+    if (!['OWNER', 'ADMIN', 'MANAGER', 'STAFF'].includes(role)) {
+      return { valid: false };
+    }
+
     const secret = process.env.ADMIN_SECRET_KEY || process.env.NEXTAUTH_SECRET || 'angel-secure-crypto-fallback-key-2026';
 
     const payload = `${userId}:${role}:${timestampStr}`;
     const expectedHmac = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+
+    if (receivedHmac.length !== expectedHmac.length) return { valid: false };
 
     const isValid = crypto.timingSafeEqual(
       Buffer.from(receivedHmac, 'utf-8'),
@@ -34,7 +42,7 @@ export function verifyAdminSessionToken(token: string): { valid: boolean; userId
     // Max 30-day session age check
     const timestamp = parseInt(timestampStr, 10);
     const maxAgeMs = 30 * 24 * 60 * 60 * 1000;
-    if (Date.now() - timestamp > maxAgeMs) return { valid: false };
+    if (isNaN(timestamp) || Date.now() - timestamp > maxAgeMs) return { valid: false };
 
     return { valid: true, userId, role };
   } catch {
