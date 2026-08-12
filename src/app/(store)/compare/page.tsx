@@ -64,7 +64,7 @@ export default function ComparePage() {
                       <img
                         src={prod.images[0]?.url}
                         alt={prod.title}
-                        className="w-28 h-36 object-cover rounded-xl mx-auto mb-3 border border-neutral-100"
+                        className="w-28 aspect-[1080/1455] object-cover rounded-xl mx-auto mb-3 border border-neutral-100"
                       />
                       <h4 className="font-serif text-sm font-bold text-neutral-900 line-clamp-1">{prod.title}</h4>
                       <p className="text-amber-800 font-bold text-sm mt-1">{formatPrice(prod.price)}</p>

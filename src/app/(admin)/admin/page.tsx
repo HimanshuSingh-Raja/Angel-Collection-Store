@@ -169,7 +169,7 @@ export default function AdminDashboardPage() {
                     <img
                       src={prod.images?.[0]?.url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
                       alt=""
-                      className="w-10 h-12 object-cover rounded-lg"
+                      className="w-10 aspect-[1080/1455] object-cover rounded-lg"
                     />
                     <div>
                       <p className="font-semibold text-white line-clamp-1">{prod.title}</p>

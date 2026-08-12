@@ -282,8 +282,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
                             : 'bg-white border-neutral-100 hover:border-amber-400/60 hover:bg-neutral-50'
                         }`}
                       >
-                        {/* 4:5 Aspect Thumbnail */}
-                        <div className="w-14 h-16 rounded-xl overflow-hidden bg-neutral-100 shrink-0 border border-neutral-100">
+                        {/* 1080:1455 Aspect Thumbnail */}
+                        <div className="w-14 aspect-[1080/1455] rounded-xl overflow-hidden bg-neutral-100 shrink-0 border border-neutral-100">
                           <img
                             src={prod.images?.[0]?.url || 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=300'}
                             alt={prod.title}

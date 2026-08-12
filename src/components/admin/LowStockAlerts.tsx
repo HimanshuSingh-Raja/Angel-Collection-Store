@@ -48,7 +48,7 @@ export const LowStockAlerts: React.FC = () => {
               className="flex items-center justify-between p-3 rounded-xl bg-admin-bg border border-admin-border"
             >
               <div className="flex items-center space-x-3">
-                <img src={prod.imageUrl} alt="" className="w-10 h-12 object-cover rounded-lg" />
+                <img src={prod.imageUrl} alt="" className="w-10 aspect-[1080/1455] object-cover rounded-lg" />
                 <div>
                   <p className="text-xs font-semibold text-white line-clamp-1">{prod.title}</p>
                   <span className="text-[10px] text-admin-muted">SKU: {prod.sku}</span>

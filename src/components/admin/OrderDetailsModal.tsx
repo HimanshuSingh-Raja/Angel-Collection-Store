@@ -174,7 +174,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, onC
                         <img
                           src={item.image || 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=200'}
                           alt={item.title}
-                          className="w-10 h-12 object-cover rounded-lg border border-admin-border shrink-0"
+                          className="w-10 aspect-[1080/1455] object-cover rounded-lg border border-admin-border shrink-0"
                         />
                         <span className="font-semibold text-white line-clamp-1">{item.title}</span>
                       </td>

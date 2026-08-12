@@ -76,7 +76,7 @@ export default function UserOrdersPage() {
               {order.items.map((item) => (
                 <div key={item.id} className="flex items-center justify-between text-xs">
                   <div className="flex items-center space-x-4">
-                    <img src={item.image} alt="" className="w-14 h-16 object-cover rounded-xl border border-neutral-200" />
+                    <img src={item.image} alt="" className="w-14 aspect-[1080/1455] object-cover rounded-xl border border-neutral-200" />
                     <div>
                       <h4 className="font-bold text-neutral-900 text-sm">{item.title}</h4>
                       <p className="text-neutral-500">Size: {item.size} | Color: {item.color} | Qty: {item.quantity}</p>
