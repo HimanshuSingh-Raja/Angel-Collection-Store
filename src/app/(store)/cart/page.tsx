@@ -87,7 +87,7 @@ export default function CartPage() {
                   <img
                     src={item.product.images[0]?.url}
                     alt={item.product.title}
-                    className="w-24 h-32 object-cover rounded-2xl border border-neutral-100 bg-neutral-50"
+                    className="w-24 aspect-[1080/1455] object-cover rounded-2xl border border-neutral-100 bg-neutral-50"
                   />
 
                   <div className="flex-1 space-y-2 text-center sm:text-left">

@@ -938,7 +938,7 @@ export default function NewProductPage() {
             </div>
 
             <div className={`mx-auto bg-white rounded-2xl overflow-hidden shadow-2xl text-neutral-900 border border-neutral-200 transition-all ${previewMode === 'mobile' ? 'max-w-[240px]' : 'w-full'}`}>
-              <div className="aspect-[3/4] relative overflow-hidden bg-neutral-100">
+              <div className="aspect-[1080/1455] relative overflow-hidden bg-neutral-100">
                 <img
                   src={images[0] || 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=800'}
                   alt=""

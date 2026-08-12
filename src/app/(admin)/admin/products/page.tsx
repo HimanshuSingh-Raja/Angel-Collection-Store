@@ -143,7 +143,7 @@ export default function AdminProductsPage() {
                         <img
                           src={prod.images?.[0]?.url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
                           alt=""
-                          className="w-12 h-14 object-cover rounded-xl border border-admin-border"
+                          className="w-12 aspect-[1080/1455] object-cover rounded-xl border border-admin-border"
                         />
                         <div>
                           <p className="font-bold text-white text-sm line-clamp-1">{prod.title}</p>

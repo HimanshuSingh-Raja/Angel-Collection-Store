@@ -1,12 +1,148 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
-import { UploadCloud, Star, Trash2, ArrowLeft, ArrowRight, Loader2, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  UploadCloud,
+  Star,
+  Trash2,
+  ArrowLeft,
+  ArrowRight,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Crop,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  Maximize,
+  Minimize,
+  Check,
+  X,
+  Sparkles,
+} from 'lucide-react';
 
 interface MediaUploaderProps {
   images: string[];
   onChange: (images: string[]) => void;
   maxFiles?: number;
+}
+
+interface CropState {
+  file: File | null;
+  imageUrl: string;
+  zoom: number; // 1 to 3
+  panX: number; // percentage or px shift
+  panY: number;
+  rotation: number; // 0, 90, 180, 270
+  fitMode: 'cover' | 'fit';
+  existingIndex?: number;
+}
+
+const TARGET_WIDTH = 1080;
+const TARGET_HEIGHT = 1455;
+const ASPECT_RATIO = TARGET_WIDTH / TARGET_HEIGHT; // ~0.742268
+
+/**
+ * Utility to process an image and render it onto an exact 1080 x 1455 px Canvas
+ */
+export async function renderTo1080x1455Canvas(
+  src: string | File,
+  options?: {
+    zoom?: number;
+    panX?: number;
+    panY?: number;
+    rotation?: number;
+    fitMode?: 'cover' | 'fit';
+  }
+): Promise<string> {
+  const { zoom = 1, panX = 0, panY = 0, rotation = 0, fitMode = 'cover' } = options || {};
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+
+    const loadSource = (url: string) => {
+      img.src = url;
+    };
+
+    if (src instanceof File) {
+      const reader = new FileReader();
+      reader.onload = (e) => loadSource(e.target?.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(src);
+    } else {
+      loadSource(src);
+    }
+
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = TARGET_WIDTH;
+      canvas.height = TARGET_HEIGHT;
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+
+      // Configure high-quality smoothing
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
+      // Clear canvas
+      ctx.fillStyle = '#0B0E14';
+      ctx.fillRect(0, 0, TARGET_WIDTH, TARGET_HEIGHT);
+
+      const srcW = img.width;
+      const srcH = img.height;
+
+      // Handle orientation swap for 90 / 270 deg
+      const isRotated = rotation === 90 || rotation === 270;
+      const effectiveW = isRotated ? srcH : srcW;
+      const effectiveH = isRotated ? srcW : srcH;
+
+      let baseScale = 1;
+      if (fitMode === 'cover') {
+        baseScale = Math.max(TARGET_WIDTH / effectiveW, TARGET_HEIGHT / effectiveH);
+      } else {
+        baseScale = Math.min(TARGET_WIDTH / effectiveW, TARGET_HEIGHT / effectiveH);
+      }
+
+      const scale = baseScale * zoom;
+      const drawW = srcW * scale;
+      const drawH = srcH * scale;
+
+      // Center of canvas
+      ctx.save();
+      ctx.translate(TARGET_WIDTH / 2 + panX, TARGET_HEIGHT / 2 + panY);
+
+      if (rotation !== 0) {
+        ctx.rotate((rotation * Math.PI) / 180);
+      }
+
+      // Draw fitted background if fitMode === 'fit'
+      if (fitMode === 'fit') {
+        // Draw soft blurred background fill
+        ctx.save();
+        ctx.filter = 'blur(30px) brightness(0.4)';
+        const bgScale = Math.max(TARGET_WIDTH / srcW, TARGET_HEIGHT / srcH) * 1.2;
+        ctx.drawImage(img, (-srcW * bgScale) / 2, (-srcH * bgScale) / 2, srcW * bgScale, srcH * bgScale);
+        ctx.restore();
+      }
+
+      // Draw primary product image
+      ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+      ctx.restore();
+
+      // Export as high quality JPEG (0.90)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
+      resolve(dataUrl);
+    };
+
+    img.onerror = () => {
+      reject(new Error('Failed to load image for canvas cropping'));
+    };
+  });
 }
 
 export const MediaUploader: React.FC<MediaUploaderProps> = ({
@@ -20,46 +156,20 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Compress image to optimized Data URL if over size limit
-  const compressImage = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (e) => {
-        const img = new Image();
-        img.src = e.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          const maxDim = 1920;
+  // Queue of files pending cropping
+  const [cropQueue, setCropQueue] = useState<File[]>([]);
+  const [activeCrop, setActiveCrop] = useState<CropState | null>(null);
 
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
+  // Dragging state inside cropper modal
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ x: number; y: number; initialPanX: number; initialPanY: number }>({
+    x: 0,
+    y: 0,
+    initialPanX: 0,
+    initialPanY: 0,
+  });
 
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-
-          // Compress to JPEG with 0.88 quality
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
-          resolve(dataUrl);
-        };
-        img.onerror = () => {
-          resolve(e.target?.result as string);
-        };
-      };
-    });
-  };
-
+  // Start processing files or open cropper
   const handleFiles = async (files: FileList | File[]) => {
     setError(null);
     setSuccessMsg(null);
@@ -73,8 +183,8 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/avif'];
 
     Array.from(files).forEach((file) => {
-      if (file.size > 10 * 1024 * 1024) {
-        setError(`File "${file.name}" exceeds maximum allowed size of 10MB.`);
+      if (file.size > 12 * 1024 * 1024) {
+        setError(`File "${file.name}" exceeds maximum allowed size of 12MB.`);
         return;
       }
       if (!allowedTypes.includes(file.type.toLowerCase()) && !file.name.match(/\.(jpg|jpeg|png|webp|avif)$/i)) {
@@ -86,33 +196,180 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
 
     if (validFiles.length === 0) return;
 
+    // Remaining slots available
+    const remainingSlots = maxFiles - images.length;
+    const filesToProcess = validFiles.slice(0, remainingSlots);
+
+    // Open cropper for the first file in queue
+    const firstFile = filesToProcess[0];
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setActiveCrop({
+        file: firstFile,
+        imageUrl: e.target?.result as string,
+        zoom: 1,
+        panX: 0,
+        panY: 0,
+        rotation: 0,
+        fitMode: 'cover',
+      });
+      setCropQueue(filesToProcess.slice(1));
+    };
+    reader.readAsDataURL(firstFile);
+  };
+
+  // Re-crop an existing uploaded gallery thumbnail
+  const openReCrop = (index: number) => {
+    const url = images[index];
+    if (!url) return;
+    setActiveCrop({
+      file: null,
+      imageUrl: url,
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+      rotation: 0,
+      fitMode: 'cover',
+      existingIndex: index,
+    });
+  };
+
+  // Confirm crop & save 1080x1455 image
+  const saveCurrentCrop = async () => {
+    if (!activeCrop) return;
+
+    setUploading(true);
+    try {
+      const croppedDataUrl = await renderTo1080x1455Canvas(activeCrop.imageUrl, {
+        zoom: activeCrop.zoom,
+        panX: activeCrop.panX,
+        panY: activeCrop.panY,
+        rotation: activeCrop.rotation,
+        fitMode: activeCrop.fitMode,
+      });
+
+      if (activeCrop.existingIndex !== undefined) {
+        // Update existing thumbnail
+        const updated = [...images];
+        updated[activeCrop.existingIndex] = croppedDataUrl;
+        onChange(updated);
+        setSuccessMsg(`Image #${activeCrop.existingIndex + 1} updated to 1080 × 1455 px!`);
+        setActiveCrop(null);
+      } else {
+        // Add new image
+        const nextImages = [...images, croppedDataUrl].slice(0, maxFiles);
+        onChange(nextImages);
+
+        // Check if more files in queue
+        if (cropQueue.length > 0) {
+          const nextFile = cropQueue[0];
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            setActiveCrop({
+              file: nextFile,
+              imageUrl: e.target?.result as string,
+              zoom: 1,
+              panX: 0,
+              panY: 0,
+              rotation: 0,
+              fitMode: 'cover',
+            });
+            setCropQueue((prev) => prev.slice(1));
+          };
+          reader.readAsDataURL(nextFile);
+        } else {
+          setActiveCrop(null);
+          setSuccessMsg(`Successfully cropped & saved image(s) to 1080 × 1455 px ratio!`);
+        }
+      }
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err) {
+      console.error('Crop save error:', err);
+      setError('Failed to crop image to 1080 × 1455 px.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Auto-crop all remaining queue files automatically with default center cover
+  const autoCropRemainingAll = async () => {
+    if (!activeCrop) return;
     setUploading(true);
     setProgress(10);
 
     try {
-      const uploadedUrls: string[] = [];
+      const allToProcess: Array<{ url: string; state?: CropState }> = [];
+      // Include current active
+      allToProcess.push({ url: activeCrop.imageUrl, state: activeCrop });
 
-      for (let i = 0; i < validFiles.length; i++) {
-        const file = validFiles[i];
-        const compressedDataUrl = await compressImage(file);
-        uploadedUrls.push(compressedDataUrl);
-
-        const currentProg = Math.round(((i + 1) / validFiles.length) * 90);
-        setProgress(currentProg);
+      // Read all queue files
+      for (const file of cropQueue) {
+        const url = await new Promise<string>((res) => {
+          const r = new FileReader();
+          r.onload = (e) => res(e.target?.result as string);
+          r.readAsDataURL(file);
+        });
+        allToProcess.push({ url });
       }
 
-      setProgress(100);
-      const combined = [...images, ...uploadedUrls].slice(0, maxFiles);
+      const processed: string[] = [];
+      for (let i = 0; i < allToProcess.length; i++) {
+        const item = allToProcess[i];
+        const result = await renderTo1080x1455Canvas(item.url, {
+          zoom: item.state?.zoom || 1,
+          panX: item.state?.panX || 0,
+          panY: item.state?.panY || 0,
+          rotation: item.state?.rotation || 0,
+          fitMode: item.state?.fitMode || 'cover',
+        });
+        processed.push(result);
+        setProgress(Math.round(((i + 1) / allToProcess.length) * 100));
+      }
+
+      const combined = [...images, ...processed].slice(0, maxFiles);
       onChange(combined);
-      setSuccessMsg(`Successfully uploaded & optimized ${validFiles.length} image(s)!`);
+      setActiveCrop(null);
+      setCropQueue([]);
+      setSuccessMsg(`Auto-cropped ${processed.length} image(s) to 1080 × 1455 px!`);
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err) {
-      console.error('Upload error:', err);
-      setError('Failed to process image files.');
+      console.error('Auto crop all error:', err);
+      setError('Failed to auto-crop queued images.');
     } finally {
       setUploading(false);
       setProgress(0);
     }
+  };
+
+  // Pan dragging handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!activeCrop) return;
+    setIsDragging(true);
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      initialPanX: activeCrop.panX,
+      initialPanY: activeCrop.panY,
+    };
+  };
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isDragging || !activeCrop) return;
+    const deltaX = e.clientX - dragStartRef.current.x;
+    const deltaY = e.clientY - dragStartRef.current.y;
+    setActiveCrop((prev) =>
+      prev
+        ? {
+            ...prev,
+            panX: dragStartRef.current.initialPanX + deltaX * 1.5,
+            panY: dragStartRef.current.initialPanY + deltaY * 1.5,
+          }
+        : null
+    );
+  }, [isDragging, activeCrop]);
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -199,32 +456,16 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
 
         <div className="space-y-1">
           <p className="font-bold text-white text-sm">
-            {uploading ? 'Optimizing & Uploading Media...' : '📷 Drag & Drop Images Here'}
+            {uploading ? 'Processing Image Ratio...' : '📷 Drag & Drop Images (Fixed 1080 × 1455 Ratio)'}
           </p>
           <p className="text-admin-muted text-xs">
-            or <span className="text-amber-400 font-bold underline">Browse Files</span> from your computer or mobile gallery
+            or <span className="text-amber-400 font-bold underline">Browse Files</span> to crop & fit automatically
           </p>
         </div>
 
-        <p className="text-[10px] text-neutral-500 uppercase tracking-wider font-mono">
-          Supports JPG, PNG, WEBP, AVIF (Max 10MB each | Up to 20 images)
-        </p>
-
-        {/* Upload Progress Indicator */}
-        {uploading && (
-          <div className="w-full max-w-xs mx-auto space-y-1.5 pt-2">
-            <div className="w-full bg-admin-border h-2 rounded-full overflow-hidden">
-              <div
-                className="bg-amber-500 h-full transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-[10px] font-mono text-amber-400">
-              <span>Uploading & Optimizing...</span>
-              <span>{progress}%</span>
-            </div>
-          </div>
-        )}
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-mono font-bold">
+          <Sparkles className="w-3 h-3" /> FIXED ASPECT RATIO: 1080 × 1455 PX
+        </div>
       </div>
 
       {/* Uploaded Image Gallery Grid */}
@@ -232,14 +473,14 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
         <div className="space-y-3 pt-2">
           <div className="flex items-center justify-between text-admin-muted text-[11px]">
             <span className="font-bold text-white">Product Gallery ({images.length} / {maxFiles} images)</span>
-            <span>⭐ First image is primary cover photo</span>
+            <span className="font-mono text-amber-400">All images: 1080 × 1455 px</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {images.map((url, idx) => (
               <div
                 key={idx}
-                className={`relative aspect-[3/4] rounded-xl overflow-hidden border-2 bg-admin-bg group shadow-lg ${
+                className={`relative aspect-[1080/1455] rounded-xl overflow-hidden border-2 bg-admin-bg group shadow-lg ${
                   idx === 0 ? 'border-amber-400' : 'border-admin-border'
                 }`}
               >
@@ -253,7 +494,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
                 )}
 
                 {/* Hover Controls */}
-                <div className="absolute inset-0 bg-black/65 opacity-0 group-hover:opacity-100 transition flex flex-col justify-between p-2">
+                <div className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 transition flex flex-col justify-between p-2.5">
                   <div className="flex justify-between items-center">
                     {idx !== 0 ? (
                       <button
@@ -266,14 +507,24 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
                       </button>
                     ) : <span />}
 
-                    <button
-                      type="button"
-                      onClick={() => removeImage(idx)}
-                      className="p-1.5 rounded-lg bg-rose-600 text-white transition hover:bg-rose-500 cursor-pointer shadow"
-                      title="Delete Image"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openReCrop(idx)}
+                        className="p-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-neutral-950 transition border border-amber-500/40 cursor-pointer shadow"
+                        title="Crop / Re-position Image"
+                      >
+                        <Crop className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeImage(idx)}
+                        className="p-1.5 rounded-lg bg-rose-600 text-white transition hover:bg-rose-500 cursor-pointer shadow"
+                        title="Delete Image"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Reorder Shift Buttons */}
@@ -287,7 +538,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
                     >
                       <ArrowLeft className="w-3.5 h-3.5" />
                     </button>
-                    <span className="text-[10px] font-mono text-neutral-400">#{idx + 1}</span>
+                    <span className="text-[10px] font-mono text-neutral-400">1080×1455</span>
                     <button
                       type="button"
                       disabled={idx === images.length - 1}
@@ -301,6 +552,230 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* INTERACTIVE CROPPER & POSITION ADJUSTMENT MODAL (1080 × 1455) */}
+      {/* ============================================================ */}
+      {activeCrop && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fade-in font-sans">
+          <div className="max-w-2xl w-full bg-[#121620] border border-[#202736] rounded-3xl p-6 shadow-2xl space-y-5 my-auto text-white">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-[#202736]">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Crop className="w-5 h-5 text-amber-400" />
+                  <h3 className="font-serif font-bold text-lg text-white">
+                    Crop & Align Image (1080 × 1455 px)
+                  </h3>
+                </div>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  Drag image to re-position product. Adjust zoom and framing for optimal visual balance.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveCrop(null)}
+                className="p-2 text-neutral-400 hover:text-white rounded-xl hover:bg-neutral-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Interactive Viewport locked to 1080:1455 Aspect Ratio */}
+            <div className="flex flex-col md:flex-row items-center gap-6">
+              {/* Cropping Frame Viewport */}
+              <div className="w-full max-w-[280px] sm:max-w-[320px] shrink-0 mx-auto">
+                <div
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}
+                  className={`relative w-full aspect-[1080/1455] rounded-2xl overflow-hidden bg-black border-2 border-amber-500 shadow-2xl select-none cursor-grab active:cursor-grabbing ${
+                    isDragging ? 'cursor-grabbing' : ''
+                  }`}
+                >
+                  {/* Image Element with Transform */}
+                  <img
+                    src={activeCrop.imageUrl}
+                    alt="Crop preview"
+                    draggable={false}
+                    className="w-full h-full object-cover pointer-events-none transition-transform duration-75"
+                    style={{
+                      transform: `translate(${activeCrop.panX / 4}px, ${activeCrop.panY / 4}px) scale(${activeCrop.zoom}) rotate(${activeCrop.rotation}deg)`,
+                      objectFit: activeCrop.fitMode === 'cover' ? 'cover' : 'contain',
+                    }}
+                  />
+
+                  {/* Rule of Thirds Alignment Overlay */}
+                  <div className="absolute inset-0 pointer-events-none grid grid-cols-3 grid-rows-3 opacity-30 border border-amber-400/40">
+                    <div className="border-r border-b border-amber-400/40" />
+                    <div className="border-r border-b border-amber-400/40" />
+                    <div className="border-b border-amber-400/40" />
+                    <div className="border-r border-b border-amber-400/40" />
+                    <div className="border-r border-b border-amber-400/40" />
+                    <div className="border-b border-amber-400/40" />
+                    <div className="border-r border-amber-400/40" />
+                    <div className="border-r border-amber-400/40" />
+                    <div />
+                  </div>
+
+                  {/* Aspect Ratio Badge */}
+                  <span className="absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-full bg-black/80 text-amber-400 font-mono font-bold text-[10px] border border-amber-500/30 backdrop-blur-md">
+                    1080 × 1455 PX
+                  </span>
+                </div>
+                <p className="text-[10px] text-center text-neutral-400 mt-2 font-mono">
+                  💡 Drag image to center product inside frame
+                </p>
+              </div>
+
+              {/* Adjustment Controls Sidebar */}
+              <div className="flex-1 space-y-5 w-full">
+                {/* Fit Mode Selector */}
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-neutral-300 uppercase tracking-wider block">
+                    Cropping Strategy
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveCrop((prev) => (prev ? { ...prev, fitMode: 'cover', panX: 0, panY: 0, zoom: 1 } : null))}
+                      className={`p-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer ${
+                        activeCrop.fitMode === 'cover'
+                          ? 'bg-amber-500 text-neutral-950 border-amber-400 shadow-md'
+                          : 'bg-admin-bg text-neutral-300 border-admin-border hover:bg-admin-card'
+                      }`}
+                    >
+                      <Maximize className="w-4 h-4" />
+                      <span>Center Cover</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveCrop((prev) => (prev ? { ...prev, fitMode: 'fit', panX: 0, panY: 0, zoom: 1 } : null))}
+                      className={`p-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer ${
+                        activeCrop.fitMode === 'fit'
+                          ? 'bg-amber-500 text-neutral-950 border-amber-400 shadow-md'
+                          : 'bg-admin-bg text-neutral-300 border-admin-border hover:bg-admin-card'
+                      }`}
+                    >
+                      <Minimize className="w-4 h-4" />
+                      <span>Fit Full Photo</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Zoom Control Slider */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-neutral-300 uppercase">Zoom Scale</span>
+                    <span className="font-mono text-amber-400 font-bold">{Math.round(activeCrop.zoom * 100)}%</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <ZoomOut className="w-4 h-4 text-neutral-400" />
+                    <input
+                      type="range"
+                      min="1"
+                      max="3"
+                      step="0.05"
+                      value={activeCrop.zoom}
+                      onChange={(e) =>
+                        setActiveCrop((prev) => (prev ? { ...prev, zoom: parseFloat(e.target.value) } : null))
+                      }
+                      className="w-full accent-amber-500 cursor-pointer"
+                    />
+                    <ZoomIn className="w-4 h-4 text-neutral-400" />
+                  </div>
+                </div>
+
+                {/* Rotate Control */}
+                <div className="flex items-center justify-between pt-2 border-t border-[#202736]">
+                  <span className="text-xs font-bold text-neutral-300 uppercase">Rotation</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setActiveCrop((prev) => (prev ? { ...prev, rotation: (prev.rotation + 90) % 360 } : null))
+                    }
+                    className="px-3 py-2 rounded-xl bg-admin-card hover:bg-neutral-800 border border-admin-border text-xs font-bold flex items-center gap-2 cursor-pointer transition text-white"
+                  >
+                    <RotateCw className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Rotate 90° ({activeCrop.rotation}°)</span>
+                  </button>
+                </div>
+
+                {/* Reset Buttons */}
+                <div className="pt-1 flex items-center justify-end gap-2 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setActiveCrop((prev) => (prev ? { ...prev, zoom: 1, panX: 0, panY: 0, rotation: 0, fitMode: 'cover' } : null))
+                    }
+                    className="text-neutral-400 hover:text-white underline cursor-pointer"
+                  >
+                    Reset Adjustments
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-4 border-t border-[#202736]">
+              {cropQueue.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={autoCropRemainingAll}
+                  disabled={uploading}
+                  className="px-4 py-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-amber-300 border border-neutral-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Auto-Crop All Remaining ({cropQueue.length + 1})</span>
+                </button>
+              ) : (
+                <div />
+              )}
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveCrop(null);
+                    setCropQueue([]);
+                  }}
+                  className="px-4 py-3 rounded-xl bg-admin-card text-neutral-300 hover:text-white border border-admin-border text-xs font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={saveCurrentCrop}
+                  disabled={uploading}
+                  className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-xs flex items-center gap-2 cursor-pointer shadow-xl disabled:opacity-50"
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-neutral-950" />
+                      <span>Saving 1080×1455...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>
+                        {activeCrop.existingIndex !== undefined
+                          ? 'Update Image (1080 × 1455 px)'
+                          : cropQueue.length > 0
+                          ? 'Save & Crop Next Image'
+                          : 'Save Product Image (1080 × 1455 px)'}
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

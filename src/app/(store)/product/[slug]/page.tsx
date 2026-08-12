@@ -163,7 +163,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">
         {/* STICKY / SWIPE GALLERY */}
         <div className="space-y-4 lg:sticky lg:top-28">
-          <div className="relative aspect-[4/5] rounded-[24px] overflow-hidden bg-neutral-100 border border-neutral-200/80 shadow-md group">
+          <div className="relative aspect-[1080/1455] rounded-[24px] overflow-hidden bg-neutral-100 border border-neutral-200/80 shadow-md group">
             <img
               src={product.images?.[activeImgIndex]?.url || product.images?.[0]?.url}
               alt={product.title}
@@ -193,7 +193,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
               <button
                 key={img.id || idx}
                 onClick={() => setActiveImgIndex(idx)}
-                className={`w-20 h-24 rounded-2xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
+                className={`w-20 aspect-[1080/1455] rounded-2xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
                   idx === activeImgIndex ? 'border-amber-700 scale-105 shadow-md' : 'border-neutral-200 opacity-60'
                 }`}
               >

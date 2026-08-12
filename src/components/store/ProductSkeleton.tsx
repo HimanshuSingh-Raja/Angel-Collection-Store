@@ -5,8 +5,8 @@ import React from 'react';
 export const ProductSkeleton: React.FC = () => {
   return (
     <div className="bg-white rounded-[18px] overflow-hidden border border-neutral-100 shadow-xs animate-pulse flex flex-col h-full">
-      {/* 4:5 Image Aspect Ratio Placeholder */}
-      <div className="relative aspect-[4/5] w-full bg-neutral-200" />
+      {/* 1080:1455 Image Aspect Ratio Placeholder */}
+      <div className="relative aspect-[1080/1455] w-full bg-neutral-200" />
 
       {/* Content Placeholder */}
       <div className="p-3 space-y-2 flex-1 flex flex-col justify-between">

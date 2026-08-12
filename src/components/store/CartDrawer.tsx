@@ -117,7 +117,7 @@ export const CartDrawer: React.FC = () => {
                     <img
                       src={item.product.images[0]?.url}
                       alt={item.product.title}
-                      className="w-20 h-24 object-cover rounded-xl bg-neutral-100 border border-neutral-100"
+                      className="w-20 aspect-[1080/1455] object-cover rounded-xl bg-neutral-100 border border-neutral-100"
                     />
 
                     <div className="flex-1 flex flex-col justify-between text-xs">

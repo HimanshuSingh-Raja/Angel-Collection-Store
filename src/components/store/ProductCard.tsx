@@ -44,8 +44,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
       onMouseLeave={() => setIsHovered(false)}
       aria-label={`Product card for ${product.title}`}
     >
-      {/* 4:5 Image Ratio Container with Rounded 18px */}
-      <div className="relative aspect-[4/5] w-full overflow-hidden bg-neutral-100">
+      {/* Fixed 1080:1455 Image Ratio Container */}
+      <div className="relative aspect-[1080/1455] w-full overflow-hidden bg-neutral-100">
         <Link href={`/product/${product.slug}`} className="block h-full w-full relative">
           <Image
             src={isHovered ? secondaryImg : primaryImg}

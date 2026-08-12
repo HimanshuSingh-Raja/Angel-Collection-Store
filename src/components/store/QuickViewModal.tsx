@@ -59,7 +59,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, onClose
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Gallery Preview */}
           <div className="space-y-4">
-            <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-neutral-100 border border-neutral-200">
+            <div className="relative aspect-[1080/1455] rounded-2xl overflow-hidden bg-neutral-100 border border-neutral-200">
               <img
                 src={product.images[activeImgIndex]?.url || product.images[0]?.url}
                 alt={product.title}
@@ -78,7 +78,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, onClose
                 <button
                   key={img.id || idx}
                   onClick={() => setActiveImgIndex(idx)}
-                  className={`w-16 h-20 rounded-xl overflow-hidden border-2 transition ${
+                  className={`w-16 aspect-[1080/1455] rounded-xl overflow-hidden border-2 transition ${
                     idx === activeImgIndex ? 'border-amber-600 scale-105' : 'border-neutral-200 opacity-60'
                   }`}
                 >
