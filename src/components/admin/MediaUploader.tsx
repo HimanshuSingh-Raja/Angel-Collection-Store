@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   UploadCloud,
   Star,
@@ -28,22 +28,20 @@ interface MediaUploaderProps {
 }
 
 interface CropState {
-  file: File | null;
   imageUrl: string;
   zoom: number; // 1 to 3
-  panX: number; // percentage or px shift
+  panX: number;
   panY: number;
   rotation: number; // 0, 90, 180, 270
   fitMode: 'cover' | 'fit';
-  existingIndex?: number;
+  existingIndex: number;
 }
 
 const TARGET_WIDTH = 1080;
 const TARGET_HEIGHT = 1455;
-const ASPECT_RATIO = TARGET_WIDTH / TARGET_HEIGHT; // ~0.742268
 
 /**
- * Utility to process an image and render it onto an exact 1080 x 1455 px Canvas
+ * Utility to process any image source and render it onto an exact 1080 x 1455 px Canvas
  */
 export async function renderTo1080x1455Canvas(
   src: string | File,
@@ -85,18 +83,18 @@ export async function renderTo1080x1455Canvas(
         return;
       }
 
-      // Configure high-quality smoothing
+      // Configure high-quality smoothing & anti-aliasing
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
 
-      // Clear canvas
+      // Fill canvas background
       ctx.fillStyle = '#0B0E14';
       ctx.fillRect(0, 0, TARGET_WIDTH, TARGET_HEIGHT);
 
       const srcW = img.width;
       const srcH = img.height;
 
-      // Handle orientation swap for 90 / 270 deg
+      // Handle orientation swap for 90 / 270 deg rotation
       const isRotated = rotation === 90 || rotation === 270;
       const effectiveW = isRotated ? srcH : srcW;
       const effectiveH = isRotated ? srcW : srcH;
@@ -112,7 +110,6 @@ export async function renderTo1080x1455Canvas(
       const drawW = srcW * scale;
       const drawH = srcH * scale;
 
-      // Center of canvas
       ctx.save();
       ctx.translate(TARGET_WIDTH / 2 + panX, TARGET_HEIGHT / 2 + panY);
 
@@ -120,9 +117,8 @@ export async function renderTo1080x1455Canvas(
         ctx.rotate((rotation * Math.PI) / 180);
       }
 
-      // Draw fitted background if fitMode === 'fit'
+      // Draw soft blurred background if fitMode === 'fit'
       if (fitMode === 'fit') {
-        // Draw soft blurred background fill
         ctx.save();
         ctx.filter = 'blur(30px) brightness(0.4)';
         const bgScale = Math.max(TARGET_WIDTH / srcW, TARGET_HEIGHT / srcH) * 1.2;
@@ -130,17 +126,17 @@ export async function renderTo1080x1455Canvas(
         ctx.restore();
       }
 
-      // Draw primary product image
+      // Draw primary product image centered
       ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
       ctx.restore();
 
-      // Export as high quality JPEG (0.90)
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
+      // Export as high quality JPEG (0.92)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
       resolve(dataUrl);
     };
 
     img.onerror = () => {
-      reject(new Error('Failed to load image for canvas cropping'));
+      reject(new Error('Failed to load image for 1080x1455 canvas output'));
     };
   });
 }
@@ -156,8 +152,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Queue of files pending cropping
-  const [cropQueue, setCropQueue] = useState<File[]>([]);
+  // Active crop state for fine-tuning positioning
   const [activeCrop, setActiveCrop] = useState<CropState | null>(null);
 
   // Dragging state inside cropper modal
@@ -169,7 +164,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
     initialPanY: 0,
   });
 
-  // Start processing files or open cropper
+  // Handle image files selection / drag-and-drop
   const handleFiles = async (files: FileList | File[]) => {
     setError(null);
     setSuccessMsg(null);
@@ -196,34 +191,43 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
 
     if (validFiles.length === 0) return;
 
-    // Remaining slots available
     const remainingSlots = maxFiles - images.length;
     const filesToProcess = validFiles.slice(0, remainingSlots);
 
-    // Open cropper for the first file in queue
-    const firstFile = filesToProcess[0];
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setActiveCrop({
-        file: firstFile,
-        imageUrl: e.target?.result as string,
-        zoom: 1,
-        panX: 0,
-        panY: 0,
-        rotation: 0,
-        fitMode: 'cover',
-      });
-      setCropQueue(filesToProcess.slice(1));
-    };
-    reader.readAsDataURL(firstFile);
+    setUploading(true);
+    setProgress(10);
+
+    try {
+      const processedUrls: string[] = [];
+
+      for (let i = 0; i < filesToProcess.length; i++) {
+        const file = filesToProcess[i];
+        // Automatically crop & resize image to exact 1080 x 1455 px canvas
+        const croppedDataUrl = await renderTo1080x1455Canvas(file, { fitMode: 'cover' });
+        processedUrls.push(croppedDataUrl);
+
+        const currentProg = Math.round(((i + 1) / filesToProcess.length) * 100);
+        setProgress(currentProg);
+      }
+
+      const combined = [...images, ...processedUrls].slice(0, maxFiles);
+      onChange(combined);
+      setSuccessMsg(`Successfully uploaded & processed ${processedUrls.length} image(s) to 1080 × 1455 px!`);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err) {
+      console.error('Upload & crop error:', err);
+      setError('Failed to process image to 1080 × 1455 px ratio.');
+    } finally {
+      setUploading(false);
+      setProgress(0);
+    }
   };
 
-  // Re-crop an existing uploaded gallery thumbnail
+  // Open cropper modal for an existing gallery image
   const openReCrop = (index: number) => {
     const url = images[index];
     if (!url) return;
     setActiveCrop({
-      file: null,
       imageUrl: url,
       zoom: 1,
       panX: 0,
@@ -234,7 +238,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
     });
   };
 
-  // Confirm crop & save 1080x1455 image
+  // Save manual crop adjustments
   const saveCurrentCrop = async () => {
     if (!activeCrop) return;
 
@@ -248,100 +252,21 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
         fitMode: activeCrop.fitMode,
       });
 
-      if (activeCrop.existingIndex !== undefined) {
-        // Update existing thumbnail
-        const updated = [...images];
-        updated[activeCrop.existingIndex] = croppedDataUrl;
-        onChange(updated);
-        setSuccessMsg(`Image #${activeCrop.existingIndex + 1} updated to 1080 × 1455 px!`);
-        setActiveCrop(null);
-      } else {
-        // Add new image
-        const nextImages = [...images, croppedDataUrl].slice(0, maxFiles);
-        onChange(nextImages);
-
-        // Check if more files in queue
-        if (cropQueue.length > 0) {
-          const nextFile = cropQueue[0];
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            setActiveCrop({
-              file: nextFile,
-              imageUrl: e.target?.result as string,
-              zoom: 1,
-              panX: 0,
-              panY: 0,
-              rotation: 0,
-              fitMode: 'cover',
-            });
-            setCropQueue((prev) => prev.slice(1));
-          };
-          reader.readAsDataURL(nextFile);
-        } else {
-          setActiveCrop(null);
-          setSuccessMsg(`Successfully cropped & saved image(s) to 1080 × 1455 px ratio!`);
-        }
-      }
+      const updated = [...images];
+      updated[activeCrop.existingIndex] = croppedDataUrl;
+      onChange(updated);
+      setSuccessMsg(`Image #${activeCrop.existingIndex + 1} updated to 1080 × 1455 px!`);
+      setActiveCrop(null);
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err) {
       console.error('Crop save error:', err);
-      setError('Failed to crop image to 1080 × 1455 px.');
+      setError('Failed to save 1080 × 1455 px framing adjustment.');
     } finally {
       setUploading(false);
     }
   };
 
-  // Auto-crop all remaining queue files automatically with default center cover
-  const autoCropRemainingAll = async () => {
-    if (!activeCrop) return;
-    setUploading(true);
-    setProgress(10);
-
-    try {
-      const allToProcess: Array<{ url: string; state?: CropState }> = [];
-      // Include current active
-      allToProcess.push({ url: activeCrop.imageUrl, state: activeCrop });
-
-      // Read all queue files
-      for (const file of cropQueue) {
-        const url = await new Promise<string>((res) => {
-          const r = new FileReader();
-          r.onload = (e) => res(e.target?.result as string);
-          r.readAsDataURL(file);
-        });
-        allToProcess.push({ url });
-      }
-
-      const processed: string[] = [];
-      for (let i = 0; i < allToProcess.length; i++) {
-        const item = allToProcess[i];
-        const result = await renderTo1080x1455Canvas(item.url, {
-          zoom: item.state?.zoom || 1,
-          panX: item.state?.panX || 0,
-          panY: item.state?.panY || 0,
-          rotation: item.state?.rotation || 0,
-          fitMode: item.state?.fitMode || 'cover',
-        });
-        processed.push(result);
-        setProgress(Math.round(((i + 1) / allToProcess.length) * 100));
-      }
-
-      const combined = [...images, ...processed].slice(0, maxFiles);
-      onChange(combined);
-      setActiveCrop(null);
-      setCropQueue([]);
-      setSuccessMsg(`Auto-cropped ${processed.length} image(s) to 1080 × 1455 px!`);
-      setTimeout(() => setSuccessMsg(null), 4000);
-    } catch (err) {
-      console.error('Auto crop all error:', err);
-      setError('Failed to auto-crop queued images.');
-    } finally {
-      setUploading(false);
-      setProgress(0);
-    }
-  };
-
-  // Pan dragging handlers
+  // Dragging handlers for cropping viewport
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!activeCrop) return;
     setIsDragging(true);
@@ -456,16 +381,32 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
 
         <div className="space-y-1">
           <p className="font-bold text-white text-sm">
-            {uploading ? 'Processing Image Ratio...' : '📷 Drag & Drop Images (Fixed 1080 × 1455 Ratio)'}
+            {uploading ? 'Processing to 1080 × 1455 PX...' : '📷 Drag & Drop Product Images (Fixed 1080 × 1455 PX)'}
           </p>
           <p className="text-admin-muted text-xs">
-            or <span className="text-amber-400 font-bold underline">Browse Files</span> to crop & fit automatically
+            or <span className="text-amber-400 font-bold underline">Browse Files</span> — Automatically cropped & centered
           </p>
         </div>
 
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-mono font-bold">
-          <Sparkles className="w-3 h-3" /> FIXED ASPECT RATIO: 1080 × 1455 PX
+        <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-mono font-bold">
+          <Sparkles className="w-3.5 h-3.5" /> ENFORCED RATIO: 1080 × 1455 PX (0.7423)
         </div>
+
+        {/* Progress Bar */}
+        {uploading && (
+          <div className="w-full max-w-xs mx-auto space-y-1.5 pt-2">
+            <div className="w-full bg-admin-border h-2 rounded-full overflow-hidden">
+              <div
+                className="bg-amber-500 h-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] font-mono text-amber-400">
+              <span>Processing to 1080 × 1455 PX...</span>
+              <span>{progress}%</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Uploaded Image Gallery Grid */}
@@ -473,7 +414,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
         <div className="space-y-3 pt-2">
           <div className="flex items-center justify-between text-admin-muted text-[11px]">
             <span className="font-bold text-white">Product Gallery ({images.length} / {maxFiles} images)</span>
-            <span className="font-mono text-amber-400">All images: 1080 × 1455 px</span>
+            <span className="font-mono text-amber-400 font-bold">All Images: Fixed 1080 × 1455 PX</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -493,8 +434,13 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
                   </span>
                 )}
 
+                {/* Resolution Badge */}
+                <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/80 text-amber-300 font-mono font-bold text-[8px] border border-amber-500/30 backdrop-blur-md">
+                  1080 × 1455 PX
+                </span>
+
                 {/* Hover Controls */}
-                <div className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 transition flex flex-col justify-between p-2.5">
+                <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition flex flex-col justify-between p-2.5">
                   <div className="flex justify-between items-center">
                     {idx !== 0 ? (
                       <button
@@ -512,7 +458,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
                         type="button"
                         onClick={() => openReCrop(idx)}
                         className="p-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-neutral-950 transition border border-amber-500/40 cursor-pointer shadow"
-                        title="Crop / Re-position Image"
+                        title="Crop / Re-align Framing (1080×1455)"
                       >
                         <Crop className="w-3.5 h-3.5" />
                       </button>
@@ -538,7 +484,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
                     >
                       <ArrowLeft className="w-3.5 h-3.5" />
                     </button>
-                    <span className="text-[10px] font-mono text-neutral-400">1080×1455</span>
+                    <span className="text-[10px] font-mono text-neutral-400">#{idx + 1}</span>
                     <button
                       type="button"
                       disabled={idx === images.length - 1}
@@ -557,22 +503,21 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
       )}
 
       {/* ============================================================ */}
-      {/* INTERACTIVE CROPPER & POSITION ADJUSTMENT MODAL (1080 × 1455) */}
+      {/* CROP & FRAMING ADJUSTMENT MODAL (1080 × 1455 PX) */}
       {/* ============================================================ */}
       {activeCrop && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fade-in font-sans">
           <div className="max-w-2xl w-full bg-[#121620] border border-[#202736] rounded-3xl p-6 shadow-2xl space-y-5 my-auto text-white">
-            {/* Modal Header */}
             <div className="flex items-center justify-between pb-4 border-b border-[#202736]">
               <div>
                 <div className="flex items-center gap-2">
                   <Crop className="w-5 h-5 text-amber-400" />
                   <h3 className="font-serif font-bold text-lg text-white">
-                    Crop & Align Image (1080 × 1455 px)
+                    Adjust Product Framing (1080 × 1455 PX)
                   </h3>
                 </div>
                 <p className="text-xs text-neutral-400 mt-0.5">
-                  Drag image to re-position product. Adjust zoom and framing for optimal visual balance.
+                  Drag image to center product inside the 1080 × 1455 frame.
                 </p>
               </div>
 
@@ -587,7 +532,6 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
 
             {/* Interactive Viewport locked to 1080:1455 Aspect Ratio */}
             <div className="flex flex-col md:flex-row items-center gap-6">
-              {/* Cropping Frame Viewport */}
               <div className="w-full max-w-[280px] sm:max-w-[320px] shrink-0 mx-auto">
                 <div
                   onMouseDown={handleMouseDown}
@@ -598,7 +542,6 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
                     isDragging ? 'cursor-grabbing' : ''
                   }`}
                 >
-                  {/* Image Element with Transform */}
                   <img
                     src={activeCrop.imageUrl}
                     alt="Crop preview"
@@ -610,7 +553,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
                     }}
                   />
 
-                  {/* Rule of Thirds Alignment Overlay */}
+                  {/* Rule of Thirds Grid Overlay */}
                   <div className="absolute inset-0 pointer-events-none grid grid-cols-3 grid-rows-3 opacity-30 border border-amber-400/40">
                     <div className="border-r border-b border-amber-400/40" />
                     <div className="border-r border-b border-amber-400/40" />
@@ -623,7 +566,6 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
                     <div />
                   </div>
 
-                  {/* Aspect Ratio Badge */}
                   <span className="absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-full bg-black/80 text-amber-400 font-mono font-bold text-[10px] border border-amber-500/30 backdrop-blur-md">
                     1080 × 1455 PX
                   </span>
@@ -633,12 +575,11 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
                 </p>
               </div>
 
-              {/* Adjustment Controls Sidebar */}
+              {/* Adjustment Controls */}
               <div className="flex-1 space-y-5 w-full">
-                {/* Fit Mode Selector */}
                 <div className="space-y-2">
                   <label className="text-[11px] font-bold text-neutral-300 uppercase tracking-wider block">
-                    Cropping Strategy
+                    Cropping Mode
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
@@ -669,7 +610,6 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
                   </div>
                 </div>
 
-                {/* Zoom Control Slider */}
                 <div className="space-y-2">
                   <div className="flex justify-between items-center text-xs">
                     <span className="font-bold text-neutral-300 uppercase">Zoom Scale</span>
@@ -692,7 +632,6 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
                   </div>
                 </div>
 
-                {/* Rotate Control */}
                 <div className="flex items-center justify-between pt-2 border-t border-[#202736]">
                   <span className="text-xs font-bold text-neutral-300 uppercase">Rotation</span>
                   <button
@@ -703,78 +642,39 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
                     className="px-3 py-2 rounded-xl bg-admin-card hover:bg-neutral-800 border border-admin-border text-xs font-bold flex items-center gap-2 cursor-pointer transition text-white"
                   >
                     <RotateCw className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Rotate 90° ({activeCrop.rotation}°)</span>
-                  </button>
-                </div>
-
-                {/* Reset Buttons */}
-                <div className="pt-1 flex items-center justify-end gap-2 text-[11px]">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setActiveCrop((prev) => (prev ? { ...prev, zoom: 1, panX: 0, panY: 0, rotation: 0, fitMode: 'cover' } : null))
-                    }
-                    className="text-neutral-400 hover:text-white underline cursor-pointer"
-                  >
-                    Reset Adjustments
+                    <span>Rotate ({activeCrop.rotation}°)</span>
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Modal Actions */}
-            <div className="flex items-center justify-between pt-4 border-t border-[#202736]">
-              {cropQueue.length > 0 ? (
-                <button
-                  type="button"
-                  onClick={autoCropRemainingAll}
-                  disabled={uploading}
-                  className="px-4 py-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-amber-300 border border-neutral-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>Auto-Crop All Remaining ({cropQueue.length + 1})</span>
-                </button>
-              ) : (
-                <div />
-              )}
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#202736]">
+              <button
+                type="button"
+                onClick={() => setActiveCrop(null)}
+                className="px-4 py-3 rounded-xl bg-admin-card text-neutral-300 hover:text-white border border-admin-border text-xs font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
 
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveCrop(null);
-                    setCropQueue([]);
-                  }}
-                  className="px-4 py-3 rounded-xl bg-admin-card text-neutral-300 hover:text-white border border-admin-border text-xs font-bold cursor-pointer"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="button"
-                  onClick={saveCurrentCrop}
-                  disabled={uploading}
-                  className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-xs flex items-center gap-2 cursor-pointer shadow-xl disabled:opacity-50"
-                >
-                  {uploading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin text-neutral-950" />
-                      <span>Saving 1080×1455...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4" />
-                      <span>
-                        {activeCrop.existingIndex !== undefined
-                          ? 'Update Image (1080 × 1455 px)'
-                          : cropQueue.length > 0
-                          ? 'Save & Crop Next Image'
-                          : 'Save Product Image (1080 × 1455 px)'}
-                      </span>
-                    </>
-                  )}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={saveCurrentCrop}
+                disabled={uploading}
+                className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-xs flex items-center gap-2 cursor-pointer shadow-xl disabled:opacity-50"
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-neutral-950" />
+                    <span>Saving 1080×1455...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Save Image (1080 × 1455 PX)</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
