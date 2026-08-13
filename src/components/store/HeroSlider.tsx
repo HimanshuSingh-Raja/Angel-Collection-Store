@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, ArrowRight, Sparkles, ShoppingBag, Truck, Ta
 import { INITIAL_BANNERS } from '@/lib/mock-data';
 import { Banner } from '@/types';
 import { getStorefrontBannersAction } from '@/actions/banner-admin';
+import { subscribeStorefrontBanners } from '@/lib/firebase/banners';
 
 export const HeroSlider: React.FC = () => {
   const [banners, setBanners] = useState<Banner[]>(INITIAL_BANNERS);
@@ -16,25 +17,41 @@ export const HeroSlider: React.FC = () => {
   const touchStartXRef = useRef<number | null>(null);
   const touchEndXRef = useRef<number | null>(null);
 
-  // Fetch live active storefront banners from database & sync on tab focus
-  const loadLiveBanners = useCallback(async () => {
-    try {
-      const liveBanners = await getStorefrontBannersAction();
-      if (liveBanners && liveBanners.length > 0) {
-        setBanners(liveBanners as any);
-      }
-    } catch (err) {
-      console.error('Failed to sync storefront banners:', err);
-    }
-  }, []);
-
+  // Real-time Firestore onSnapshot listener for instant banner updates & deletes
   useEffect(() => {
-    loadLiveBanners();
+    let unsubscribeFirestore: (() => void) | null = null;
 
-    // Re-sync when switching back to tab
-    window.addEventListener('focus', loadLiveBanners);
-    return () => window.removeEventListener('focus', loadLiveBanners);
-  }, [loadLiveBanners]);
+    try {
+      unsubscribeFirestore = subscribeStorefrontBanners((liveActiveBanners) => {
+        if (liveActiveBanners && liveActiveBanners.length > 0) {
+          setBanners(liveActiveBanners);
+        }
+      });
+    } catch (err) {
+      console.warn('Firestore real-time subscription fallback to server action:', err);
+    }
+
+    // Fallback sync via Server Action
+    async function loadFallbackBanners() {
+      try {
+        const actionBanners = await getStorefrontBannersAction();
+        if (actionBanners && actionBanners.length > 0) {
+          setBanners(actionBanners as any);
+        }
+      } catch (e) {
+        // Fallback to initial
+      }
+    }
+    loadFallbackBanners();
+
+    const handleFocus = () => loadFallbackBanners();
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      if (unsubscribeFirestore) unsubscribeFirestore();
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
 
   // Handle slide bounds
   const totalSlides = banners.length || 1;

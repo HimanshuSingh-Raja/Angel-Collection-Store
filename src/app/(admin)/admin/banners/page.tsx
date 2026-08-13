@@ -27,6 +27,11 @@ import {
   deleteBannerAction,
   updateBannerAction,
 } from '@/actions/banner-admin';
+import {
+  subscribeAdminBanners,
+  saveFirestoreBanner,
+  deleteFirestoreBanner,
+} from '@/lib/firebase/banners';
 
 interface BannerMetadata {
   width: number;
@@ -69,26 +74,42 @@ export default function AdminBannersPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch live banners from database
-  const loadBanners = async () => {
-    setLoading(true);
-    try {
-      const liveBanners = await getAdminBannersAction();
-      if (liveBanners && liveBanners.length > 0) {
-        setBanners(liveBanners as any);
-      } else {
-        setBanners(INITIAL_BANNERS);
-      }
-    } catch (err) {
-      console.error('Failed to load banners from DB:', err);
-      setBanners(INITIAL_BANNERS);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Subscribe to real-time Firestore banner collection on mount
   useEffect(() => {
-    loadBanners();
+    setLoading(true);
+    let unsubscribeFirestore: (() => void) | null = null;
+
+    try {
+      unsubscribeFirestore = subscribeAdminBanners((liveBanners) => {
+        if (liveBanners && liveBanners.length > 0) {
+          setBanners(liveBanners);
+        } else {
+          setBanners(INITIAL_BANNERS);
+        }
+        setLoading(false);
+      });
+    } catch (err) {
+      console.warn('Firestore real-time subscription error, fallback to server action:', err);
+    }
+
+    // Server action fallback
+    async function loadFallback() {
+      try {
+        const liveBanners = await getAdminBannersAction();
+        if (liveBanners && liveBanners.length > 0) {
+          setBanners(liveBanners as any);
+        }
+      } catch (e) {
+        // Fallback to initial
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadFallback();
+
+    return () => {
+      if (unsubscribeFirestore) unsubscribeFirestore();
+    };
   }, []);
 
   // Calculate pagination boundaries
@@ -131,7 +152,6 @@ export default function AdminBannersPage() {
     setValidationError(null);
     setSuccessMsg(null);
 
-    // If image exists, inspect metadata specs
     if (banner.imageUrl) {
       const img = new Image();
       img.src = banner.imageUrl;
@@ -232,7 +252,7 @@ export default function AdminBannersPage() {
     e.preventDefault();
   };
 
-  // Save or Update Banner
+  // Real-time Save / Update Banner to Firestore & Database
   const handleSaveBanner = async () => {
     if (!title.trim()) {
       alert('Banner Title is required.');
@@ -247,7 +267,8 @@ export default function AdminBannersPage() {
     try {
       if (editingBanner) {
         // UPDATE EXISTING BANNER
-        const res = await updateBannerAction(editingBanner.id, {
+        await saveFirestoreBanner({
+          id: editingBanner.id,
           title: title.trim(),
           subtitle: subtitle.trim(),
           imageUrl: imageUrl,
@@ -256,21 +277,25 @@ export default function AdminBannersPage() {
           isActive: isActive,
         });
 
-        if (res.success && res.banner) {
-          setBanners((prev) =>
-            prev.map((b) => (b.id === editingBanner.id ? (res.banner as any) : b))
-          );
-          setSuccessMsg('✅ Banner updated successfully!');
-          setTimeout(() => {
-            setShowModal(false);
-            setEditingBanner(null);
-          }, 600);
-        } else {
-          alert(res.error || 'Failed to update banner.');
-        }
+        await updateBannerAction(editingBanner.id, {
+          title: title.trim(),
+          subtitle: subtitle.trim(),
+          imageUrl: imageUrl,
+          link: link.trim(),
+          category: category,
+          isActive: isActive,
+        });
+
+        setSuccessMsg('✅ Banner updated & synced to storefront in real-time!');
+        setTimeout(() => {
+          setShowModal(false);
+          setEditingBanner(null);
+        }, 600);
       } else {
         // CREATE NEW BANNER
-        const res = await createBannerAction({
+        const newDocId = `banner_${Date.now()}`;
+        await saveFirestoreBanner({
+          id: newDocId,
           title: title.trim(),
           subtitle: subtitle.trim(),
           imageUrl: imageUrl,
@@ -280,15 +305,20 @@ export default function AdminBannersPage() {
           isActive: isActive,
         });
 
-        if (res.success && res.banner) {
-          setBanners((prev) => [...prev, res.banner as any]);
-          setSuccessMsg('✅ Banner published successfully!');
-          setTimeout(() => {
-            setShowModal(false);
-          }, 600);
-        } else {
-          alert(res.error || 'Failed to create banner.');
-        }
+        await createBannerAction({
+          title: title.trim(),
+          subtitle: subtitle.trim(),
+          imageUrl: imageUrl,
+          link: link.trim(),
+          category: category,
+          position: banners.length + 1,
+          isActive: isActive,
+        });
+
+        setSuccessMsg('✅ Banner published & synced to storefront in real-time!');
+        setTimeout(() => {
+          setShowModal(false);
+        }, 600);
       }
     } catch (err: any) {
       console.error('Error saving banner:', err);
@@ -298,24 +328,34 @@ export default function AdminBannersPage() {
     }
   };
 
-  // Quick Toggle Active Status
+  // Quick Toggle Active Status in Real-Time
   const handleToggleActive = async (banner: Banner) => {
     const nextActive = !banner.isActive;
-    setBanners((prev) =>
-      prev.map((b) => (b.id === banner.id ? { ...b, isActive: nextActive } : b))
-    );
     try {
+      await saveFirestoreBanner({
+        id: banner.id,
+        isActive: nextActive,
+        title: banner.title,
+        subtitle: banner.subtitle,
+        imageUrl: banner.imageUrl,
+        link: banner.link,
+        category: banner.category,
+      });
       await updateBannerAction(banner.id, { isActive: nextActive });
     } catch (err) {
       console.error('Failed to toggle banner status:', err);
     }
   };
 
-  // Delete Banner
+  // Real-Time Delete Banner
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this banner?')) {
-      setBanners((prev) => prev.filter((b) => b.id !== id));
-      await deleteBannerAction(id);
+    if (confirm('Are you sure you want to delete this banner in real-time?')) {
+      try {
+        await deleteFirestoreBanner(id);
+        await deleteBannerAction(id);
+      } catch (err) {
+        console.error('Failed to delete banner:', err);
+      }
     }
   };
 
@@ -330,6 +370,9 @@ export default function AdminBannersPage() {
             </span>
             <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[10px] font-mono font-bold border border-amber-500/20">
               5 BANNERS PER PAGE
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-bold border border-emerald-500/20 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> FIRESTORE REALTIME SYNC
             </span>
           </div>
           <h1 className="font-serif text-3xl font-bold tracking-tight text-white mt-1">
@@ -392,7 +435,7 @@ export default function AdminBannersPage() {
       {loading ? (
         <div className="flex items-center justify-center py-20 text-admin-muted text-xs gap-2">
           <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
-          <span>Fetching promotional banners from database...</span>
+          <span>Listening to Firestore real-time banner collection...</span>
         </div>
       ) : paginatedBanners.length === 0 ? (
         <div className="p-12 text-center bg-admin-card rounded-2xl border border-admin-border space-y-3">
@@ -755,7 +798,7 @@ export default function AdminBannersPage() {
                 {saving ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-neutral-950" />
-                    <span>Saving Changes...</span>
+                    <span>Saving Real-Time...</span>
                   </>
                 ) : (
                   <>
