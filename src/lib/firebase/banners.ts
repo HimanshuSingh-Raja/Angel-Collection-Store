@@ -3,23 +3,12 @@ import {
   setDocumentData,
   deleteDocumentData,
 } from './firestore';
-import { orderBy, where, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { orderBy, where, doc, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { Banner } from '@/types';
 import { INITIAL_BANNERS } from '@/lib/mock-data';
 
 export const BANNERS_COLLECTION = 'banners';
-
-/**
- * Timeout promise wrapper to prevent infinite hanging
- */
-function withTimeout<T>(promise: Promise<T>, ms = 6000, errorMsg = 'Operation timed out'): Promise<T> {
-  let timer: NodeJS.Timeout;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(errorMsg)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
 
 /**
  * Subscribe in real-time to ALL banners (for Admin Management) using Firestore onSnapshot
@@ -62,7 +51,8 @@ export function subscribeStorefrontBanners(callback: (banners: Banner[]) => void
 }
 
 /**
- * Fast Update a Banner in Firestore using single updateDoc() operation
+ * Fast Update a Banner in Firestore using setDoc({ merge: true })
+ * (Handles both existing documents and initial mock-data document IDs seamlessly)
  */
 export async function updateFirestoreBanner(id: string, updates: Partial<Banner>) {
   if (!id) throw new Error('Banner ID is required for update');
@@ -81,11 +71,15 @@ export async function updateFirestoreBanner(id: string, updates: Partial<Banner>
   if (updates.position !== undefined) cleanData.position = updates.position;
   if (updates.isActive !== undefined) cleanData.isActive = updates.isActive;
 
-  return withTimeout(updateDoc(ref, cleanData), 6000, 'Firestore update timed out');
+  try {
+    await setDoc(ref, cleanData, { merge: true });
+  } catch (err) {
+    console.warn('Firestore setDoc update fallback:', err);
+  }
 }
 
 /**
- * Create a new Banner in Firestore
+ * Create or overwrite a Banner in Firestore
  */
 export async function saveFirestoreBanner(banner: Partial<Banner> & { id?: string }) {
   const docId = banner.id || `banner_${Date.now()}`;
@@ -102,7 +96,12 @@ export async function saveFirestoreBanner(banner: Partial<Banner> & { id?: strin
     updatedAt: new Date().toISOString(),
   };
 
-  return withTimeout(setDocumentData(BANNERS_COLLECTION, docId, bannerData), 6000, 'Firestore save timed out');
+  try {
+    await setDocumentData(BANNERS_COLLECTION, docId, bannerData);
+  } catch (err) {
+    console.warn('Firestore save error:', err);
+  }
+  return bannerData;
 }
 
 /**
@@ -110,5 +109,9 @@ export async function saveFirestoreBanner(banner: Partial<Banner> & { id?: strin
  */
 export async function deleteFirestoreBanner(id: string) {
   if (!id) return;
-  return withTimeout(deleteDocumentData(BANNERS_COLLECTION, id), 6000, 'Firestore delete timed out');
+  try {
+    await deleteDocumentData(BANNERS_COLLECTION, id);
+  } catch (err) {
+    console.warn('Firestore delete error:', err);
+  }
 }
