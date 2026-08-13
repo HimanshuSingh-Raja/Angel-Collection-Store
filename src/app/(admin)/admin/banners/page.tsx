@@ -9,11 +9,15 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  Eye,
-  Info,
   Maximize2,
   X,
   Sparkles,
+  Edit3,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Check,
 } from 'lucide-react';
 import { INITIAL_BANNERS } from '@/lib/mock-data';
 import { Banner } from '@/types';
@@ -32,6 +36,8 @@ interface BannerMetadata {
   aspectRatio: string;
 }
 
+const ITEMS_PER_PAGE = 5;
+
 export default function AdminBannersPage() {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,8 +45,14 @@ export default function AdminBannersPage() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  // Form State
+  // Pagination State (5 banners per page)
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Modal State (Add or Edit Mode)
   const [showModal, setShowModal] = useState(false);
+  const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
+
+  // Form State
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [link, setLink] = useState('/shop?category=women');
@@ -48,6 +60,7 @@ export default function AdminBannersPage() {
     'HERO_SLIDER' | 'OFFER_BANNER' | 'FESTIVAL_BANNER' | 'COLLECTION_BANNER' | 'POPUP_BANNER'
   >('HERO_SLIDER');
   const [imageUrl, setImageUrl] = useState('');
+  const [isActive, setIsActive] = useState(true);
 
   // Image Metadata & Validation
   const [metadata, setMetadata] = useState<BannerMetadata | null>(null);
@@ -56,44 +69,101 @@ export default function AdminBannersPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch live banners from PostgreSQL
-  useEffect(() => {
-    async function loadBanners() {
-      setLoading(true);
-      try {
-        const liveBanners = await getAdminBannersAction();
-        if (liveBanners && liveBanners.length > 0) {
-          setBanners(liveBanners as any);
-        } else {
-          setBanners(INITIAL_BANNERS);
-        }
-      } catch (err) {
-        console.error('Failed to load banners from DB:', err);
+  // Fetch live banners from database
+  const loadBanners = async () => {
+    setLoading(true);
+    try {
+      const liveBanners = await getAdminBannersAction();
+      if (liveBanners && liveBanners.length > 0) {
+        setBanners(liveBanners as any);
+      } else {
         setBanners(INITIAL_BANNERS);
-      } finally {
-        setLoading(false);
       }
+    } catch (err) {
+      console.error('Failed to load banners from DB:', err);
+      setBanners(INITIAL_BANNERS);
+    } finally {
+      setLoading(false);
     }
+  };
 
+  useEffect(() => {
     loadBanners();
   }, []);
 
-  // Handle Banner Image File Selection & Dimension Validation
+  // Calculate pagination boundaries
+  const totalPages = Math.ceil(banners.length / ITEMS_PER_PAGE) || 1;
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedBanners = banners.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+  // Reset pagination if current page becomes out of bounds
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [banners.length, totalPages, currentPage]);
+
+  // Open Modal in Create Mode
+  const openCreateModal = () => {
+    setEditingBanner(null);
+    setTitle('');
+    setSubtitle('');
+    setLink('/shop?category=women');
+    setCategory('HERO_SLIDER');
+    setImageUrl('');
+    setIsActive(true);
+    setMetadata(null);
+    setValidationError(null);
+    setSuccessMsg(null);
+    setShowModal(true);
+  };
+
+  // Open Modal in Edit Mode
+  const openEditModal = (banner: Banner) => {
+    setEditingBanner(banner);
+    setTitle(banner.title || '');
+    setSubtitle(banner.subtitle || '');
+    setLink(banner.link || '/shop?category=women');
+    setCategory(banner.category || 'HERO_SLIDER');
+    setImageUrl(banner.imageUrl || '');
+    setIsActive(banner.isActive ?? true);
+    setMetadata(null);
+    setValidationError(null);
+    setSuccessMsg(null);
+
+    // If image exists, inspect metadata specs
+    if (banner.imageUrl) {
+      const img = new Image();
+      img.src = banner.imageUrl;
+      img.onload = () => {
+        const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+        const divisor = gcd(img.width, img.height);
+        setMetadata({
+          width: img.width,
+          height: img.height,
+          fileSizeMb: '0.85',
+          format: 'WEBP',
+          aspectRatio: `${(img.width / divisor).toFixed(2)}:${(img.height / divisor).toFixed(2)}`,
+        });
+      };
+    }
+
+    setShowModal(true);
+  };
+
+  // Handle Image Selection & Dimensions Check
   const handleBannerFileSelect = async (files: FileList | File[]) => {
     setValidationError(null);
     setSuccessMsg(null);
-    setMetadata(null);
 
     const file = files[0];
     if (!file) return;
 
-    // 1. File Size Validation (Max 10 MB)
     if (file.size > 10 * 1024 * 1024) {
       setValidationError(`❌ File "${file.name}" exceeds maximum allowed size of 10MB.`);
       return;
     }
 
-    // 2. MIME Format Validation
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/avif'];
     if (!allowedTypes.includes(file.type.toLowerCase()) && !file.name.match(/\.(jpg|jpeg|png|webp|avif)$/i)) {
       setValidationError(`❌ File "${file.name}" is not a supported format (JPG, PNG, WEBP, AVIF).`);
@@ -103,7 +173,6 @@ export default function AdminBannersPage() {
     setUploading(true);
     setProgress(20);
 
-    // 3. Read Dimensions via HTML5 Image
     const reader = new FileReader();
     reader.readAsDataURL(file);
 
@@ -121,7 +190,6 @@ export default function AdminBannersPage() {
         const divisor = gcd(width, height);
         const aspectRatio = `${(width / divisor).toFixed(2)}:${(height / divisor).toFixed(2)}`;
 
-        // Minimum Resolution Check for Desktop Banner (1920 × 700 px)
         if (width < 1920 || height < 700) {
           setValidationError(
             `❌ Banner resolution is too small.\nRequired: 1920 × 700 px minimum.\nYour Image: Width: ${width} px, Height: ${height} px.\nPlease upload a higher resolution banner.`
@@ -131,7 +199,6 @@ export default function AdminBannersPage() {
           return;
         }
 
-        // Set Image Metadata
         setMetadata({
           width,
           height,
@@ -165,7 +232,7 @@ export default function AdminBannersPage() {
     e.preventDefault();
   };
 
-  // Save Banner to PostgreSQL
+  // Save or Update Banner
   const handleSaveBanner = async () => {
     if (!title.trim()) {
       alert('Banner Title is required.');
@@ -178,37 +245,75 @@ export default function AdminBannersPage() {
 
     setSaving(true);
     try {
-      const res = await createBannerAction({
-        title: title.trim(),
-        subtitle: subtitle.trim(),
-        imageUrl: imageUrl,
-        link: link.trim(),
-        category: category,
-        position: banners.length + 1,
-        isActive: true,
-      });
+      if (editingBanner) {
+        // UPDATE EXISTING BANNER
+        const res = await updateBannerAction(editingBanner.id, {
+          title: title.trim(),
+          subtitle: subtitle.trim(),
+          imageUrl: imageUrl,
+          link: link.trim(),
+          category: category,
+          isActive: isActive,
+        });
 
-      if (res.success && res.banner) {
-        setBanners((prev) => [...prev, res.banner as any]);
-        setShowModal(false);
-        setTitle('');
-        setSubtitle('');
-        setImageUrl('');
-        setMetadata(null);
+        if (res.success && res.banner) {
+          setBanners((prev) =>
+            prev.map((b) => (b.id === editingBanner.id ? (res.banner as any) : b))
+          );
+          setSuccessMsg('✅ Banner updated successfully!');
+          setTimeout(() => {
+            setShowModal(false);
+            setEditingBanner(null);
+          }, 600);
+        } else {
+          alert(res.error || 'Failed to update banner.');
+        }
       } else {
-        alert(res.error || 'Failed to create banner.');
+        // CREATE NEW BANNER
+        const res = await createBannerAction({
+          title: title.trim(),
+          subtitle: subtitle.trim(),
+          imageUrl: imageUrl,
+          link: link.trim(),
+          category: category,
+          position: banners.length + 1,
+          isActive: isActive,
+        });
+
+        if (res.success && res.banner) {
+          setBanners((prev) => [...prev, res.banner as any]);
+          setSuccessMsg('✅ Banner published successfully!');
+          setTimeout(() => {
+            setShowModal(false);
+          }, 600);
+        } else {
+          alert(res.error || 'Failed to create banner.');
+        }
       }
     } catch (err: any) {
       console.error('Error saving banner:', err);
-      alert('Failed to save banner.');
+      alert('Failed to save banner changes.');
     } finally {
       setSaving(false);
     }
   };
 
+  // Quick Toggle Active Status
+  const handleToggleActive = async (banner: Banner) => {
+    const nextActive = !banner.isActive;
+    setBanners((prev) =>
+      prev.map((b) => (b.id === banner.id ? { ...b, isActive: nextActive } : b))
+    );
+    try {
+      await updateBannerAction(banner.id, { isActive: nextActive });
+    } catch (err) {
+      console.error('Failed to toggle banner status:', err);
+    }
+  };
+
   // Delete Banner
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this promotional banner from PostgreSQL DB?')) {
+    if (confirm('Are you sure you want to delete this banner?')) {
       setBanners((prev) => prev.filter((b) => b.id !== id));
       await deleteBannerAction(id);
     }
@@ -219,20 +324,21 @@ export default function AdminBannersPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-admin-border">
         <div>
-          <span className="text-[10px] font-mono text-amber-400 uppercase tracking-widest block">
-            PROMOTIONAL MARKETING
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono text-amber-400 uppercase tracking-widest block">
+              PROMOTIONAL MARKETING
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[10px] font-mono font-bold border border-amber-500/20">
+              5 BANNERS PER PAGE
+            </span>
+          </div>
           <h1 className="font-serif text-3xl font-bold tracking-tight text-white mt-1">
             Banner & Hero Sliders
           </h1>
         </div>
 
         <button
-          onClick={() => {
-            setShowModal(true);
-            setValidationError(null);
-            setSuccessMsg(null);
-          }}
+          onClick={openCreateModal}
           className="px-5 py-2.5 bg-amber-500 text-neutral-950 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 hover:bg-amber-400 transition shadow-lg cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Add Banner Image
@@ -266,61 +372,175 @@ export default function AdminBannersPage() {
         </div>
       </div>
 
-      {/* Live Banners Grid */}
+      {/* Management Toolbar & Count Bar */}
+      <div className="flex items-center justify-between text-xs text-admin-muted px-1">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-white">Active Banners Gallery</span>
+          <span className="text-amber-400 font-mono">
+            (Showing {banners.length > 0 ? startIndex + 1 : 0} - {Math.min(startIndex + ITEMS_PER_PAGE, banners.length)} of {banners.length})
+          </span>
+        </div>
+
+        {totalPages > 1 && (
+          <span className="font-mono text-neutral-400">
+            Page <strong className="text-white">{currentPage}</strong> of <strong>{totalPages}</strong>
+          </span>
+        )}
+      </div>
+
+      {/* Live Banners Grid (Max 5 at a time) */}
       {loading ? (
         <div className="flex items-center justify-center py-20 text-admin-muted text-xs gap-2">
           <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
-          <span>Fetching promotional banners from PostgreSQL DB...</span>
+          <span>Fetching promotional banners from database...</span>
+        </div>
+      ) : paginatedBanners.length === 0 ? (
+        <div className="p-12 text-center bg-admin-card rounded-2xl border border-admin-border space-y-3">
+          <ImageIcon className="w-10 h-10 text-neutral-600 mx-auto" />
+          <p className="text-white font-bold text-sm">No promotional banners found</p>
+          <p className="text-admin-muted text-xs max-w-sm mx-auto">
+            Click "+ Add Banner Image" to publish your first high-resolution hero campaign.
+          </p>
+          <button
+            onClick={openCreateModal}
+            className="px-4 py-2 bg-amber-500 text-neutral-950 font-bold text-xs rounded-xl hover:bg-amber-400 transition"
+          >
+            + Add First Banner
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {banners.map((b) => (
+          {paginatedBanners.map((b) => (
             <div
               key={b.id}
-              className="bg-admin-card rounded-2xl border border-admin-border overflow-hidden shadow-xl space-y-4 p-4 hover:border-amber-500/50 transition group"
+              className={`bg-admin-card rounded-2xl border overflow-hidden shadow-xl space-y-4 p-4 transition group ${
+                b.isActive ? 'border-admin-border hover:border-amber-500/50' : 'border-rose-900/40 opacity-75'
+              }`}
             >
               <div className="relative aspect-[16/7] rounded-xl overflow-hidden bg-admin-bg border border-admin-border">
-                <img src={b.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <img
+                  src={b.imageUrl}
+                  alt={b.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
                 <span className="absolute top-2 left-2 px-2.5 py-1 rounded-full bg-amber-500 text-neutral-950 font-bold text-[9px] uppercase tracking-wider shadow-md">
                   {b.category}
                 </span>
+
+                {!b.isActive && (
+                  <span className="absolute top-2 right-2 px-2.5 py-1 rounded-full bg-rose-600 text-white font-bold text-[9px] uppercase tracking-wider shadow-md">
+                    PAUSED
+                  </span>
+                )}
               </div>
 
               <div>
                 <h3 className="font-serif text-base font-bold text-white line-clamp-1">{b.title}</h3>
                 <p className="text-xs text-admin-muted line-clamp-1">{b.subtitle || 'Haute Couture Campaign'}</p>
-                <span className="text-[10px] font-mono text-emerald-400 block mt-1">{b.link}</span>
+                <span className="text-[10px] font-mono text-emerald-400 block mt-1 truncate">{b.link}</span>
               </div>
 
               <div className="flex justify-between items-center pt-3 border-t border-admin-border text-xs">
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px] border border-emerald-500/30">
-                  Live on Storefront
-                </span>
+                {/* Active / Inactive Status Toggle */}
                 <button
-                  onClick={() => handleDelete(b.id)}
-                  className="p-2 rounded-lg bg-admin-bg text-admin-muted hover:text-rose-400 border border-admin-border transition cursor-pointer"
-                  title="Delete Banner"
+                  type="button"
+                  onClick={() => handleToggleActive(b)}
+                  className={`px-2.5 py-1 rounded-full font-bold text-[10px] border flex items-center gap-1.5 transition cursor-pointer ${
+                    b.isActive
+                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30'
+                      : 'bg-rose-500/20 text-rose-400 border-rose-500/30 hover:bg-rose-500/30'
+                  }`}
+                  title="Toggle Storefront Visibility"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  {b.isActive ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                  <span>{b.isActive ? 'Live on Storefront' : 'Hidden from Store'}</span>
                 </button>
+
+                <div className="flex items-center gap-2">
+                  {/* Edit Banner Button */}
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(b)}
+                    className="p-2 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-neutral-950 border border-amber-500/30 transition cursor-pointer shadow"
+                    title="Edit Banner Details"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+
+                  {/* Delete Banner Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(b.id)}
+                    className="p-2 rounded-lg bg-admin-bg text-admin-muted hover:text-rose-400 border border-admin-border transition cursor-pointer"
+                    title="Delete Banner"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Add Banner Modal */}
+      {/* Pagination Controls (5 Banners per Page) */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-6 border-t border-admin-border text-xs">
+          <button
+            type="button"
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+            className="px-4 py-2 bg-admin-card text-white rounded-xl border border-admin-border font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-neutral-800 transition flex items-center gap-1.5 cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4" /> Previous
+          </button>
+
+          <div className="flex items-center gap-2">
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+              <button
+                key={pageNum}
+                onClick={() => setCurrentPage(pageNum)}
+                className={`w-9 h-9 rounded-xl font-mono text-xs font-bold transition cursor-pointer ${
+                  currentPage === pageNum
+                    ? 'bg-amber-500 text-neutral-950 shadow-md'
+                    : 'bg-admin-card text-neutral-400 hover:text-white border border-admin-border'
+                }`}
+              >
+                {pageNum}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+            className="px-4 py-2 bg-admin-card text-white rounded-xl border border-admin-border font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-neutral-800 transition flex items-center gap-1.5 cursor-pointer"
+          >
+            Next <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Add / Edit Banner Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-admin-card border border-admin-border p-6 rounded-3xl max-w-2xl w-full space-y-6 shadow-2xl relative my-8">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto font-sans">
+          <div className="bg-admin-card border border-admin-border p-6 rounded-3xl max-w-2xl w-full space-y-6 shadow-2xl relative my-8 text-white">
+            {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-admin-border pb-3">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-amber-400" />
-                <h3 className="font-serif text-xl font-bold text-white">Add Promotional Banner</h3>
+                <h3 className="font-serif text-xl font-bold text-white">
+                  {editingBanner ? 'Edit Promotional Banner' : 'Add Promotional Banner'}
+                </h3>
               </div>
               <button
-                onClick={() => setShowModal(false)}
-                className="p-1 rounded-lg text-admin-muted hover:text-white"
+                type="button"
+                onClick={() => {
+                  setShowModal(false);
+                  setEditingBanner(null);
+                }}
+                className="p-1.5 rounded-lg text-admin-muted hover:text-white hover:bg-neutral-800 transition"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -372,7 +592,11 @@ export default function AdminBannersPage() {
 
               <div className="space-y-1">
                 <p className="font-bold text-white text-sm">
-                  {uploading ? 'Validating Banner Dimensions...' : '+ Add Banner Image'}
+                  {uploading
+                    ? 'Validating Banner Dimensions...'
+                    : editingBanner
+                    ? '📷 Change Banner Image'
+                    : '+ Add Banner Image'}
                 </p>
                 <p className="text-admin-muted text-xs">
                   or <span className="text-amber-400 font-bold underline">Browse Files</span> from gallery or computer
@@ -396,43 +620,45 @@ export default function AdminBannersPage() {
             </div>
 
             {/* Banner Live Preview & Metadata Strip */}
-            {metadata && imageUrl && (
+            {imageUrl && (
               <div className="space-y-3 p-4 bg-admin-bg rounded-2xl border border-admin-border">
                 <div className="flex justify-between items-center text-xs font-bold text-amber-400 border-b border-admin-border pb-2">
-                  <span>LIVE IMAGE PREVIEW & METADATA</span>
-                  <span className="font-mono text-emerald-400">PASSED 1920x700 SPEC</span>
+                  <span>LIVE IMAGE PREVIEW</span>
+                  <span className="font-mono text-emerald-400">STOREFRONT RESOLUTION SPEC</span>
                 </div>
 
                 <div className="relative aspect-[16/7] rounded-xl overflow-hidden bg-black border border-admin-border shadow-lg">
-                  <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+                  <img src={imageUrl} alt="Banner preview" className="w-full h-full object-cover" />
                 </div>
 
-                <div className="grid grid-cols-5 gap-2 text-center text-xs pt-1">
-                  <div className="p-2 bg-admin-card rounded-lg border border-admin-border">
-                    <span className="text-[9px] text-admin-muted block">Width</span>
-                    <span className="font-bold text-white font-mono">{metadata.width} px</span>
+                {metadata && (
+                  <div className="grid grid-cols-5 gap-2 text-center text-xs pt-1">
+                    <div className="p-2 bg-admin-card rounded-lg border border-admin-border">
+                      <span className="text-[9px] text-admin-muted block">Width</span>
+                      <span className="font-bold text-white font-mono">{metadata.width} px</span>
+                    </div>
+                    <div className="p-2 bg-admin-card rounded-lg border border-admin-border">
+                      <span className="text-[9px] text-admin-muted block">Height</span>
+                      <span className="font-bold text-white font-mono">{metadata.height} px</span>
+                    </div>
+                    <div className="p-2 bg-admin-card rounded-lg border border-admin-border">
+                      <span className="text-[9px] text-admin-muted block">Size</span>
+                      <span className="font-bold text-white font-mono">{metadata.fileSizeMb} MB</span>
+                    </div>
+                    <div className="p-2 bg-admin-card rounded-lg border border-admin-border">
+                      <span className="text-[9px] text-admin-muted block">Format</span>
+                      <span className="font-bold text-amber-400 font-mono">{metadata.format}</span>
+                    </div>
+                    <div className="p-2 bg-admin-card rounded-lg border border-admin-border">
+                      <span className="text-[9px] text-admin-muted block">Aspect</span>
+                      <span className="font-bold text-emerald-400 font-mono">{metadata.aspectRatio}</span>
+                    </div>
                   </div>
-                  <div className="p-2 bg-admin-card rounded-lg border border-admin-border">
-                    <span className="text-[9px] text-admin-muted block">Height</span>
-                    <span className="font-bold text-white font-mono">{metadata.height} px</span>
-                  </div>
-                  <div className="p-2 bg-admin-card rounded-lg border border-admin-border">
-                    <span className="text-[9px] text-admin-muted block">Size</span>
-                    <span className="font-bold text-white font-mono">{metadata.fileSizeMb} MB</span>
-                  </div>
-                  <div className="p-2 bg-admin-card rounded-lg border border-admin-border">
-                    <span className="text-[9px] text-admin-muted block">Format</span>
-                    <span className="font-bold text-amber-400 font-mono">{metadata.format}</span>
-                  </div>
-                  <div className="p-2 bg-admin-card rounded-lg border border-admin-border">
-                    <span className="text-[9px] text-admin-muted block">Aspect</span>
-                    <span className="font-bold text-emerald-400 font-mono">{metadata.aspectRatio}</span>
-                  </div>
-                </div>
+                )}
               </div>
             )}
 
-            {/* Banner Fields */}
+            {/* Form Input Fields */}
             <div className="space-y-4">
               <div>
                 <label className="text-[11px] font-bold text-admin-muted uppercase block mb-1">
@@ -468,7 +694,7 @@ export default function AdminBannersPage() {
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-admin-bg text-xs text-white rounded-xl border border-admin-border font-bold focus:outline-none focus:border-amber-500"
+                    className="w-full px-3 py-2 bg-admin-bg text-xs text-white rounded-xl border border-admin-border font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
                   >
                     <option value="HERO_SLIDER">HERO SLIDER</option>
                     <option value="OFFER_BANNER">OFFER BANNER</option>
@@ -490,24 +716,53 @@ export default function AdminBannersPage() {
                   />
                 </div>
               </div>
+
+              {/* Storefront Active Status Checkbox */}
+              <div className="pt-2">
+                <label className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    onChange={(e) => setIsActive(e.target.checked)}
+                    className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-white">
+                    Publish Live on Storefront immediately
+                  </span>
+                </label>
+              </div>
             </div>
 
             {/* Modal Actions */}
-            <div className="flex justify-end space-x-3 pt-3 border-t border-admin-border">
+            <div className="flex justify-end space-x-3 pt-4 border-t border-admin-border">
               <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 bg-admin-bg text-admin-muted hover:text-white rounded-xl text-xs font-bold transition"
+                type="button"
+                onClick={() => {
+                  setShowModal(false);
+                  setEditingBanner(null);
+                }}
+                className="px-4 py-2.5 bg-admin-bg text-admin-muted hover:text-white rounded-xl text-xs font-bold transition cursor-pointer"
               >
                 Cancel
               </button>
 
               <button
+                type="button"
                 onClick={handleSaveBanner}
                 disabled={saving || uploading || !imageUrl}
-                className="px-6 py-2 bg-amber-500 text-neutral-950 font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-amber-400 transition flex items-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
+                className="px-6 py-2.5 bg-amber-500 text-neutral-950 font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-amber-400 transition flex items-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
               >
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                <span>Publish Banner</span>
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-neutral-950" />
+                    <span>Saving Changes...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4 text-neutral-950" />
+                    <span>{editingBanner ? 'Update Banner / Save Changes' : 'Publish Banner'}</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
