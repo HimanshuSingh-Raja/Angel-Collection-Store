@@ -43,11 +43,19 @@ export async function deleteDocumentData(collectionName: string, id: string) {
 export function subscribeCollectionData<T = DocumentData>(
   collectionName: string,
   callback: (data: T[]) => void,
+  onError?: (error: Error) => void,
   ...constraints: QueryConstraint[]
 ) {
   const q = query(collection(db, collectionName), ...constraints);
-  return onSnapshot(q, (snap) => {
-    const items = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as T));
-    callback(items);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const items = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as T));
+      callback(items);
+    },
+    (error) => {
+      console.warn(`Firestore subscription notice [${collectionName}]:`, error.message);
+      if (onError) onError(error);
+    }
+  );
 }

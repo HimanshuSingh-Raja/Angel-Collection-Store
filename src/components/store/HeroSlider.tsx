@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,21 +17,10 @@ export const HeroSlider: React.FC = () => {
   const touchStartXRef = useRef<number | null>(null);
   const touchEndXRef = useRef<number | null>(null);
 
-  // Real-time Firestore onSnapshot listener for instant banner updates & deletes
+  // Real-time Firestore onSnapshot listener with graceful offline fallback
   useEffect(() => {
     let unsubscribeFirestore: (() => void) | null = null;
 
-    try {
-      unsubscribeFirestore = subscribeStorefrontBanners((liveActiveBanners) => {
-        if (liveActiveBanners && liveActiveBanners.length > 0) {
-          setBanners(liveActiveBanners);
-        }
-      });
-    } catch (err) {
-      console.warn('Firestore real-time subscription fallback to server action:', err);
-    }
-
-    // Fallback sync via Server Action
     async function loadFallbackBanners() {
       try {
         const actionBanners = await getStorefrontBannersAction();
@@ -42,6 +31,23 @@ export const HeroSlider: React.FC = () => {
         // Fallback to initial
       }
     }
+
+    try {
+      unsubscribeFirestore = subscribeStorefrontBanners(
+        (liveActiveBanners) => {
+          if (liveActiveBanners && liveActiveBanners.length > 0) {
+            setBanners(liveActiveBanners);
+          }
+        },
+        (err) => {
+          console.warn('Firestore offline fallback:', err.message);
+          loadFallbackBanners();
+        }
+      );
+    } catch (err) {
+      console.warn('Firestore real-time subscription fallback to server action:', err);
+    }
+
     loadFallbackBanners();
 
     const handleFocus = () => loadFallbackBanners();

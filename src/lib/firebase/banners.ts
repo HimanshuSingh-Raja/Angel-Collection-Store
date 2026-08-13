@@ -13,7 +13,10 @@ export const BANNERS_COLLECTION = 'banners';
 /**
  * Subscribe in real-time to ALL banners (for Admin Management) using Firestore onSnapshot
  */
-export function subscribeAdminBanners(callback: (banners: Banner[]) => void) {
+export function subscribeAdminBanners(
+  callback: (banners: Banner[]) => void,
+  onError?: (err: Error) => void
+) {
   return subscribeCollectionData<Banner>(
     BANNERS_COLLECTION,
     (liveBanners) => {
@@ -24,6 +27,11 @@ export function subscribeAdminBanners(callback: (banners: Banner[]) => void) {
         callback(sorted);
       }
     },
+    (err) => {
+      console.warn('Firestore admin banner subscription fallback:', err.message);
+      callback(INITIAL_BANNERS);
+      if (onError) onError(err);
+    },
     orderBy('position', 'asc')
   );
 }
@@ -31,7 +39,10 @@ export function subscribeAdminBanners(callback: (banners: Banner[]) => void) {
 /**
  * Subscribe in real-time to ACTIVE banners (for Customer Storefront) using Firestore onSnapshot
  */
-export function subscribeStorefrontBanners(callback: (banners: Banner[]) => void) {
+export function subscribeStorefrontBanners(
+  callback: (banners: Banner[]) => void,
+  onError?: (err: Error) => void
+) {
   return subscribeCollectionData<Banner>(
     BANNERS_COLLECTION,
     (liveBanners) => {
@@ -44,6 +55,11 @@ export function subscribeStorefrontBanners(callback: (banners: Banner[]) => void
 
         callback(activeBanners.length > 0 ? activeBanners : INITIAL_BANNERS);
       }
+    },
+    (err) => {
+      console.warn('Firestore storefront banner subscription fallback:', err.message);
+      callback(INITIAL_BANNERS);
+      if (onError) onError(err);
     },
     where('isActive', '==', true),
     orderBy('position', 'asc')
