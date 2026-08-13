@@ -30,6 +30,7 @@ import {
 import {
   subscribeAdminBanners,
   saveFirestoreBanner,
+  updateFirestoreBanner,
   deleteFirestoreBanner,
 } from '@/lib/firebase/banners';
 
@@ -252,8 +253,10 @@ export default function AdminBannersPage() {
     e.preventDefault();
   };
 
-  // Real-time Save / Update Banner to Firestore & Database
+  // Fast Optimized Banner Save/Update Handler
   const handleSaveBanner = async () => {
+    if (saving) return; // Prevent double submission
+
     if (!title.trim()) {
       alert('Banner Title is required.');
       return;
@@ -264,37 +267,54 @@ export default function AdminBannersPage() {
     }
 
     setSaving(true);
+    setValidationError(null);
+
     try {
       if (editingBanner) {
-        // UPDATE EXISTING BANNER
-        await saveFirestoreBanner({
-          id: editingBanner.id,
+        // Check if image changed to avoid sending heavy image string unnecessarily
+        const isImageChanged = imageUrl !== editingBanner.imageUrl;
+
+        const updatePayload: Partial<Banner> = {
           title: title.trim(),
           subtitle: subtitle.trim(),
-          imageUrl: imageUrl,
           link: link.trim(),
           category: category,
           isActive: isActive,
-        });
+        };
 
-        await updateBannerAction(editingBanner.id, {
-          title: title.trim(),
-          subtitle: subtitle.trim(),
-          imageUrl: imageUrl,
-          link: link.trim(),
-          category: category,
-          isActive: isActive,
-        });
+        if (isImageChanged) {
+          updatePayload.imageUrl = imageUrl;
+        }
 
-        setSuccessMsg('✅ Banner updated & synced to storefront in real-time!');
+        // 1. Single fast Firestore updateDoc
+        await updateFirestoreBanner(editingBanner.id, updatePayload);
+
+        // 2. Immediately update local UI state
+        setBanners((prev) =>
+          prev.map((b) =>
+            b.id === editingBanner.id
+              ? {
+                  ...b,
+                  ...updatePayload,
+                }
+              : b
+          )
+        );
+
+        // 3. Background server action sync (non-blocking)
+        updateBannerAction(editingBanner.id, updatePayload).catch((err) =>
+          console.warn('Background server action sync:', err)
+        );
+
+        setSuccessMsg('✅ Banner updated successfully!');
         setTimeout(() => {
           setShowModal(false);
           setEditingBanner(null);
-        }, 600);
+        }, 300);
       } else {
         // CREATE NEW BANNER
         const newDocId = `banner_${Date.now()}`;
-        await saveFirestoreBanner({
+        const newBannerData = {
           id: newDocId,
           title: title.trim(),
           subtitle: subtitle.trim(),
@@ -303,56 +323,56 @@ export default function AdminBannersPage() {
           category: category,
           position: banners.length + 1,
           isActive: isActive,
-        });
+        };
 
-        await createBannerAction({
-          title: title.trim(),
-          subtitle: subtitle.trim(),
-          imageUrl: imageUrl,
-          link: link.trim(),
-          category: category,
-          position: banners.length + 1,
-          isActive: isActive,
-        });
+        // 1. Fast Firestore setDoc
+        await saveFirestoreBanner(newBannerData);
 
-        setSuccessMsg('✅ Banner published & synced to storefront in real-time!');
+        // 2. Immediately update local UI state
+        setBanners((prev) => [...prev, newBannerData as any]);
+
+        // 3. Background server action sync (non-blocking)
+        createBannerAction(newBannerData).catch((err) =>
+          console.warn('Background server action create:', err)
+        );
+
+        setSuccessMsg('✅ Banner published successfully!');
         setTimeout(() => {
           setShowModal(false);
-        }, 600);
+        }, 300);
       }
     } catch (err: any) {
       console.error('Error saving banner:', err);
-      alert('Failed to save banner changes.');
+      setValidationError(`❌ Save failed: ${err.message || 'Network timeout or error'}`);
     } finally {
       setSaving(false);
     }
   };
 
-  // Quick Toggle Active Status in Real-Time
+  // Fast Toggle Active Status in Real-Time
   const handleToggleActive = async (banner: Banner) => {
     const nextActive = !banner.isActive;
+    // Optimistic UI update
+    setBanners((prev) =>
+      prev.map((b) => (b.id === banner.id ? { ...b, isActive: nextActive } : b))
+    );
+
     try {
-      await saveFirestoreBanner({
-        id: banner.id,
-        isActive: nextActive,
-        title: banner.title,
-        subtitle: banner.subtitle,
-        imageUrl: banner.imageUrl,
-        link: banner.link,
-        category: banner.category,
-      });
-      await updateBannerAction(banner.id, { isActive: nextActive });
+      await updateFirestoreBanner(banner.id, { isActive: nextActive });
+      updateBannerAction(banner.id, { isActive: nextActive }).catch(() => {});
     } catch (err) {
       console.error('Failed to toggle banner status:', err);
     }
   };
 
-  // Real-Time Delete Banner
+  // Fast Delete Banner
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this banner in real-time?')) {
+    if (confirm('Are you sure you want to delete this banner?')) {
+      // Optimistic UI update
+      setBanners((prev) => prev.filter((b) => b.id !== id));
       try {
         await deleteFirestoreBanner(id);
-        await deleteBannerAction(id);
+        deleteBannerAction(id).catch(() => {});
       } catch (err) {
         console.error('Failed to delete banner:', err);
       }
@@ -372,7 +392,7 @@ export default function AdminBannersPage() {
               5 BANNERS PER PAGE
             </span>
             <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-bold border border-emerald-500/20 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> FIRESTORE REALTIME SYNC
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> FIRESTORE FAST SYNC
             </span>
           </div>
           <h1 className="font-serif text-3xl font-bold tracking-tight text-white mt-1">
@@ -780,11 +800,12 @@ export default function AdminBannersPage() {
             <div className="flex justify-end space-x-3 pt-4 border-t border-admin-border">
               <button
                 type="button"
+                disabled={saving}
                 onClick={() => {
                   setShowModal(false);
                   setEditingBanner(null);
                 }}
-                className="px-4 py-2.5 bg-admin-bg text-admin-muted hover:text-white rounded-xl text-xs font-bold transition cursor-pointer"
+                className="px-4 py-2.5 bg-admin-bg text-admin-muted hover:text-white rounded-xl text-xs font-bold transition cursor-pointer disabled:opacity-40"
               >
                 Cancel
               </button>
@@ -798,7 +819,7 @@ export default function AdminBannersPage() {
                 {saving ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-neutral-950" />
-                    <span>Saving Real-Time...</span>
+                    <span>Saving...</span>
                   </>
                 ) : (
                   <>
