@@ -253,8 +253,8 @@ export default function AdminBannersPage() {
     e.preventDefault();
   };
 
-  // Fast Optimized Banner Save/Update Handler
-  const handleSaveBanner = async () => {
+  // Instant (0ms) Banner Save/Update Handler
+  const handleSaveBanner = () => {
     if (saving) return; // Prevent double submission
 
     if (!title.trim()) {
@@ -269,113 +269,99 @@ export default function AdminBannersPage() {
     setSaving(true);
     setValidationError(null);
 
-    try {
-      if (editingBanner) {
-        // Check if image changed to avoid sending heavy image string unnecessarily
-        const isImageChanged = imageUrl !== editingBanner.imageUrl;
+    if (editingBanner) {
+      // Check if image changed to avoid sending heavy image string unnecessarily
+      const isImageChanged = imageUrl !== editingBanner.imageUrl;
 
-        const updatePayload: Partial<Banner> = {
-          title: title.trim(),
-          subtitle: subtitle.trim(),
-          link: link.trim(),
-          category: category,
-          isActive: isActive,
-        };
+      const updatePayload: Partial<Banner> = {
+        title: title.trim(),
+        subtitle: subtitle.trim(),
+        link: link.trim(),
+        category: category,
+        isActive: isActive,
+      };
 
-        if (isImageChanged) {
-          updatePayload.imageUrl = imageUrl;
-        }
-
-        // 1. Single fast Firestore updateDoc
-        await updateFirestoreBanner(editingBanner.id, updatePayload);
-
-        // 2. Immediately update local UI state
-        setBanners((prev) =>
-          prev.map((b) =>
-            b.id === editingBanner.id
-              ? {
-                  ...b,
-                  ...updatePayload,
-                }
-              : b
-          )
-        );
-
-        // 3. Background server action sync (non-blocking)
-        updateBannerAction(editingBanner.id, updatePayload).catch((err) =>
-          console.warn('Background server action sync:', err)
-        );
-
-        setSuccessMsg('✅ Banner updated successfully!');
-        setTimeout(() => {
-          setShowModal(false);
-          setEditingBanner(null);
-        }, 300);
-      } else {
-        // CREATE NEW BANNER
-        const newDocId = `banner_${Date.now()}`;
-        const newBannerData = {
-          id: newDocId,
-          title: title.trim(),
-          subtitle: subtitle.trim(),
-          imageUrl: imageUrl,
-          link: link.trim(),
-          category: category,
-          position: banners.length + 1,
-          isActive: isActive,
-        };
-
-        // 1. Fast Firestore setDoc
-        await saveFirestoreBanner(newBannerData);
-
-        // 2. Immediately update local UI state
-        setBanners((prev) => [...prev, newBannerData as any]);
-
-        // 3. Background server action sync (non-blocking)
-        createBannerAction(newBannerData).catch((err) =>
-          console.warn('Background server action create:', err)
-        );
-
-        setSuccessMsg('✅ Banner published successfully!');
-        setTimeout(() => {
-          setShowModal(false);
-        }, 300);
+      if (isImageChanged) {
+        updatePayload.imageUrl = imageUrl;
       }
-    } catch (err: any) {
-      console.error('Error saving banner:', err);
-      setValidationError(`❌ Save failed: ${err.message || 'Network timeout or error'}`);
-    } finally {
+
+      // 1. INSTANT LOCAL UI UPDATE (0ms)
+      setBanners((prev) =>
+        prev.map((b) =>
+          b.id === editingBanner.id
+            ? {
+                ...b,
+                ...updatePayload,
+              }
+            : b
+        )
+      );
+
+      // 2. INSTANT MODAL CLOSE (0ms)
+      setShowModal(false);
+      setEditingBanner(null);
       setSaving(false);
+
+      // 3. ASYNC BACKGROUND FIRESTORE & SERVER SYNC (NON-BLOCKING)
+      updateFirestoreBanner(editingBanner.id, updatePayload).catch((err) =>
+        console.warn('Background Firestore sync:', err)
+      );
+      updateBannerAction(editingBanner.id, updatePayload).catch((err) =>
+        console.warn('Background server action sync:', err)
+      );
+    } else {
+      // CREATE NEW BANNER
+      const newDocId = `banner_${Date.now()}`;
+      const newBannerData = {
+        id: newDocId,
+        title: title.trim(),
+        subtitle: subtitle.trim(),
+        imageUrl: imageUrl,
+        link: link.trim(),
+        category: category,
+        position: banners.length + 1,
+        isActive: isActive,
+      };
+
+      // 1. INSTANT LOCAL UI UPDATE (0ms)
+      setBanners((prev) => [...prev, newBannerData as any]);
+
+      // 2. INSTANT MODAL CLOSE (0ms)
+      setShowModal(false);
+      setSaving(false);
+
+      // 3. ASYNC BACKGROUND FIRESTORE & SERVER SYNC (NON-BLOCKING)
+      saveFirestoreBanner(newBannerData).catch((err) =>
+        console.warn('Background Firestore save:', err)
+      );
+      createBannerAction(newBannerData).catch((err) =>
+        console.warn('Background server action create:', err)
+      );
     }
   };
 
-  // Fast Toggle Active Status in Real-Time
-  const handleToggleActive = async (banner: Banner) => {
+  // Instant Toggle Active Status
+  const handleToggleActive = (banner: Banner) => {
     const nextActive = !banner.isActive;
     // Optimistic UI update
     setBanners((prev) =>
       prev.map((b) => (b.id === banner.id ? { ...b, isActive: nextActive } : b))
     );
 
-    try {
-      await updateFirestoreBanner(banner.id, { isActive: nextActive });
-      updateBannerAction(banner.id, { isActive: nextActive }).catch(() => {});
-    } catch (err) {
-      console.error('Failed to toggle banner status:', err);
-    }
+    // Non-blocking async updates
+    updateFirestoreBanner(banner.id, { isActive: nextActive }).catch(() => {});
+    updateBannerAction(banner.id, { isActive: nextActive }).catch(() => {});
   };
 
-  // Fast Delete Banner
-  const handleDelete = async (id: string) => {
+  // Instant Delete Banner
+  const handleDelete = (id: string) => {
     if (confirm('Are you sure you want to delete this banner?')) {
       // Optimistic UI update
       setBanners((prev) => prev.filter((b) => b.id !== id));
-      try {
-        await deleteFirestoreBanner(id);
-        deleteBannerAction(id).catch(() => {});
-      } catch (err) {
-        console.error('Failed to delete banner:', err);
-      }
+
+      // Non-blocking async deletes
+      deleteFirestoreBanner(id).catch(() => {});
+      deleteBannerAction(id).catch(() => {});
     }
   };
 
@@ -392,7 +378,7 @@ export default function AdminBannersPage() {
               5 BANNERS PER PAGE
             </span>
             <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-bold border border-emerald-500/20 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> FIRESTORE FAST SYNC
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> INSTANT SYNC ACTIVE
             </span>
           </div>
           <h1 className="font-serif text-3xl font-bold tracking-tight text-white mt-1">
@@ -455,7 +441,7 @@ export default function AdminBannersPage() {
       {loading ? (
         <div className="flex items-center justify-center py-20 text-admin-muted text-xs gap-2">
           <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
-          <span>Listening to Firestore real-time banner collection...</span>
+          <span>Fetching promotional banners...</span>
         </div>
       ) : paginatedBanners.length === 0 ? (
         <div className="p-12 text-center bg-admin-card rounded-2xl border border-admin-border space-y-3">
@@ -742,7 +728,7 @@ export default function AdminBannersPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Discover timeless elegance crafted with Italian silk & cashmeres"
+                  placeholder="e.g. Discover timeless designs, dazzling details, and effortless"
                   value={subtitle}
                   onChange={(e) => setSubtitle(e.target.value)}
                   className="w-full px-3 py-2 bg-admin-bg text-xs text-white rounded-xl border border-admin-border focus:outline-none focus:border-amber-500"
