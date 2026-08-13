@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { db as prisma } from '@/lib/db';
 import { BannerCategory } from '@prisma/client';
+import { INITIAL_BANNERS } from '@/lib/mock-data';
 
 export interface CreateBannerInput {
   title: string;
@@ -21,20 +22,50 @@ export async function getAdminBannersAction() {
       orderBy: { position: 'asc' },
     });
 
-    return banners.map((b) => ({
-      id: b.id,
-      title: b.title,
-      subtitle: b.subtitle || '',
-      imageUrl: b.imageUrl,
-      mobileImageUrl: b.mobileImageUrl || '',
-      link: b.link || '',
-      category: b.category,
-      position: b.position,
-      isActive: b.isActive,
-    }));
+    if (banners && banners.length > 0) {
+      return banners.map((b) => ({
+        id: b.id,
+        title: b.title,
+        subtitle: b.subtitle || '',
+        imageUrl: b.imageUrl,
+        mobileImageUrl: b.mobileImageUrl || '',
+        link: b.link || '',
+        category: b.category,
+        position: b.position,
+        isActive: b.isActive,
+      }));
+    }
+    return INITIAL_BANNERS;
   } catch (error) {
     console.error('Error fetching admin banners:', error);
-    return [];
+    return INITIAL_BANNERS;
+  }
+}
+
+export async function getStorefrontBannersAction() {
+  try {
+    const banners = await prisma.banner.findMany({
+      where: { isActive: true },
+      orderBy: { position: 'asc' },
+    });
+
+    if (banners && banners.length > 0) {
+      return banners.map((b) => ({
+        id: b.id,
+        title: b.title,
+        subtitle: b.subtitle || '',
+        imageUrl: b.imageUrl,
+        mobileImageUrl: b.mobileImageUrl || '',
+        link: b.link || '',
+        category: b.category,
+        position: b.position,
+        isActive: b.isActive,
+      }));
+    }
+    return INITIAL_BANNERS;
+  } catch (error) {
+    console.error('Error fetching storefront banners:', error);
+    return INITIAL_BANNERS;
   }
 }
 
@@ -73,14 +104,14 @@ export async function updateBannerAction(id: string, data: Partial<CreateBannerI
     const updated = await prisma.banner.update({
       where: { id },
       data: {
-        title: data.title?.trim(),
-        subtitle: data.subtitle?.trim(),
-        imageUrl: data.imageUrl,
-        mobileImageUrl: data.mobileImageUrl,
-        link: data.link,
-        category: data.category as BannerCategory,
-        position: data.position,
-        isActive: data.isActive,
+        title: data.title !== undefined ? data.title.trim() : undefined,
+        subtitle: data.subtitle !== undefined ? data.subtitle.trim() : undefined,
+        imageUrl: data.imageUrl !== undefined ? data.imageUrl : undefined,
+        mobileImageUrl: data.mobileImageUrl !== undefined ? data.mobileImageUrl : undefined,
+        link: data.link !== undefined ? data.link.trim() : undefined,
+        category: data.category ? (data.category as BannerCategory) : undefined,
+        position: data.position !== undefined ? data.position : undefined,
+        isActive: data.isActive !== undefined ? data.isActive : undefined,
       },
     });
 
@@ -90,7 +121,8 @@ export async function updateBannerAction(id: string, data: Partial<CreateBannerI
 
     return { success: true, banner: updated };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    console.error('Error updating banner:', error);
+    return { success: false, error: error.message || 'Failed to update banner.' };
   }
 }
 
@@ -106,6 +138,7 @@ export async function deleteBannerAction(id: string) {
 
     return { success: true };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    console.error('Error deleting banner:', error);
+    return { success: false, error: error.message || 'Failed to delete banner.' };
   }
 }

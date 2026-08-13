@@ -1,26 +1,54 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, ArrowRight, Sparkles, ShoppingBag, Truck, Tag } from 'lucide-react';
 import { INITIAL_BANNERS } from '@/lib/mock-data';
+import { Banner } from '@/types';
+import { getStorefrontBannersAction } from '@/actions/banner-admin';
 
 export const HeroSlider: React.FC = () => {
+  const [banners, setBanners] = useState<Banner[]>(INITIAL_BANNERS);
   const [currentSlide, setCurrentSlide] = useState(0);
+
   const touchStartXRef = useRef<number | null>(null);
   const touchEndXRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % INITIAL_BANNERS.length);
-    }, 5000);
-    return () => clearInterval(timer);
+  // Fetch live active storefront banners from database & sync on tab focus
+  const loadLiveBanners = useCallback(async () => {
+    try {
+      const liveBanners = await getStorefrontBannersAction();
+      if (liveBanners && liveBanners.length > 0) {
+        setBanners(liveBanners as any);
+      }
+    } catch (err) {
+      console.error('Failed to sync storefront banners:', err);
+    }
   }, []);
 
-  const nextSlide = () => setCurrentSlide((prev) => (prev + 1) % INITIAL_BANNERS.length);
-  const prevSlide = () => setCurrentSlide((prev) => (prev - 1 + INITIAL_BANNERS.length) % INITIAL_BANNERS.length);
+  useEffect(() => {
+    loadLiveBanners();
+
+    // Re-sync when switching back to tab
+    window.addEventListener('focus', loadLiveBanners);
+    return () => window.removeEventListener('focus', loadLiveBanners);
+  }, [loadLiveBanners]);
+
+  // Handle slide bounds
+  const totalSlides = banners.length || 1;
+
+  useEffect(() => {
+    if (totalSlides === 0) return;
+    const timer = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % totalSlides);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [totalSlides]);
+
+  const nextSlide = () => setCurrentSlide((prev) => (prev + 1) % totalSlides);
+  const prevSlide = () => setCurrentSlide((prev) => (prev - 1 + totalSlides) % totalSlides);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartXRef.current = e.touches[0].clientX;
@@ -45,7 +73,7 @@ export const HeroSlider: React.FC = () => {
     touchEndXRef.current = null;
   };
 
-  const activeBanner = INITIAL_BANNERS[currentSlide];
+  const activeBanner = banners[currentSlide % totalSlides] || INITIAL_BANNERS[0];
 
   // Category quick-nav pills
   const categoriesPills = [
@@ -135,7 +163,7 @@ export const HeroSlider: React.FC = () => {
         <div className="absolute bottom-8 left-4 right-4 sm:bottom-14 sm:left-10 z-20 max-w-xl space-y-2 sm:space-y-4">
           <div className="flex items-center gap-2">
             <span className="px-3 py-1 rounded-full bg-amber-500/20 backdrop-blur-md border border-amber-500/40 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.25em] text-amber-300 shadow-sm">
-              ✦ HAUTE COUTURE 2026
+              ✦ {activeBanner.category || 'HAUTE COUTURE 2026'}
             </span>
           </div>
 
@@ -185,34 +213,40 @@ export const HeroSlider: React.FC = () => {
         </div>
 
         {/* Arrows (Desktop) */}
-        <button
-          onClick={prevSlide}
-          className="hidden sm:flex absolute left-4 top-1/2 -translate-y-1/2 z-30 p-2.5 rounded-full bg-black/40 text-white hover:bg-amber-400 hover:text-neutral-950 transition backdrop-blur-md border border-white/20 cursor-pointer min-h-[44px] min-w-[44px] items-center justify-center"
-          aria-label="Previous Slide"
-        >
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-        <button
-          onClick={nextSlide}
-          className="hidden sm:flex absolute right-4 top-1/2 -translate-y-1/2 z-30 p-2.5 rounded-full bg-black/40 text-white hover:bg-amber-400 hover:text-neutral-950 transition backdrop-blur-md border border-white/20 cursor-pointer min-h-[44px] min-w-[44px] items-center justify-center"
-          aria-label="Next Slide"
-        >
-          <ChevronRight className="w-5 h-5" />
-        </button>
+        {totalSlides > 1 && (
+          <>
+            <button
+              onClick={prevSlide}
+              className="hidden sm:flex absolute left-4 top-1/2 -translate-y-1/2 z-30 p-2.5 rounded-full bg-black/40 text-white hover:bg-amber-400 hover:text-neutral-950 transition backdrop-blur-md border border-white/20 cursor-pointer min-h-[44px] min-w-[44px] items-center justify-center"
+              aria-label="Previous Slide"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <button
+              onClick={nextSlide}
+              className="hidden sm:flex absolute right-4 top-1/2 -translate-y-1/2 z-30 p-2.5 rounded-full bg-black/40 text-white hover:bg-amber-400 hover:text-neutral-950 transition backdrop-blur-md border border-white/20 cursor-pointer min-h-[44px] min-w-[44px] items-center justify-center"
+              aria-label="Next Slide"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </>
+        )}
 
         {/* Slider Indicator Dots */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center space-x-2">
-          {INITIAL_BANNERS.map((_, idx) => (
-            <button
-              key={idx}
-              onClick={() => setCurrentSlide(idx)}
-              className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
-                idx === currentSlide ? 'w-6 bg-amber-400' : 'w-2 bg-white/50 hover:bg-white'
-              }`}
-              aria-label={`Go to slide ${idx + 1}`}
-            />
-          ))}
-        </div>
+        {totalSlides > 1 && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center space-x-2">
+            {banners.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => setCurrentSlide(idx)}
+                className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                  idx === currentSlide ? 'w-6 bg-amber-400' : 'w-2 bg-white/50 hover:bg-white'
+                }`}
+                aria-label={`Go to slide ${idx + 1}`}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 2. HORIZONTAL CATEGORY QUICK-NAV PILLS BELOW HERO */}
