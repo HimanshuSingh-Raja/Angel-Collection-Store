@@ -9,10 +9,11 @@ import { FilterBottomSheet } from '@/components/store/FilterBottomSheet';
 import { SortBottomSheet } from '@/components/store/SortBottomSheet';
 import { QuickViewModal } from '@/components/store/QuickViewModal';
 import { SearchBar } from '@/components/navbar/SearchBar';
-import { INITIAL_PRODUCTS } from '@/lib/mock-data';
 import { Product, FilterState } from '@/types';
+import { INITIAL_PRODUCTS } from '@/lib/mock-data';
 import { SlidersHorizontal, ArrowUpDown, Sparkles, X, ChevronDown } from 'lucide-react';
 import { getStorefrontProductsAction } from '@/actions/product-store';
+import { subscribeStorefrontProducts } from '@/lib/firebase/products';
 
 function ShopContent() {
   const searchParams = useSearchParams();
@@ -20,15 +21,8 @@ function ShopContent() {
   const initialType = searchParams?.get('type') || searchParams?.get('subcategory') || '';
   const initialSale = searchParams?.get('onSale') === 'true';
 
-  const [productsList, setProductsList] = useState<Product[]>(() => {
-    return (INITIAL_PRODUCTS as any[]).filter((p) => {
-      if (initialCat && p.category?.slug !== initialCat && p.category?.name?.toLowerCase() !== initialCat.toLowerCase()) {
-        return false;
-      }
-      return true;
-    });
-  });
-  const [loading, setLoading] = useState(false);
+  const [productsList, setProductsList] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [filters, setFilters] = useState<FilterState>({
     category: initialCat,
@@ -60,10 +54,13 @@ function ShopContent() {
     }));
   }, [searchParams]);
 
-  // Fetch live published products from database or fallback to mock
+  // Fetch live published products from database & listen to real-time updates
   useEffect(() => {
+    let isMounted = true;
+    let unsubscribeFirestore: (() => void) | null = null;
+
     async function loadLiveProducts() {
-      const startTime = Date.now();
+      setLoading(true);
       try {
         const dbProducts = await getStorefrontProductsAction({
           category: filters.category || undefined,
@@ -72,20 +69,31 @@ function ShopContent() {
           search: filters.searchQuery || undefined,
         });
 
-        const duration = Date.now() - startTime;
-        console.log(`⏱️ [SHOP PAGE] Product catalog load duration: ${duration}ms`);
-
-        if (dbProducts && dbProducts.length > 0) {
+        if (isMounted && Array.isArray(dbProducts)) {
           setProductsList(dbProducts as any);
         }
       } catch (err) {
         console.error('Failed to load products:', err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     }
 
     loadLiveProducts();
+
+    try {
+      unsubscribeFirestore = subscribeStorefrontProducts((realtimeProducts) => {
+        if (isMounted && Array.isArray(realtimeProducts)) {
+          setProductsList(realtimeProducts);
+          setLoading(false);
+        }
+      });
+    } catch (e) {}
+
+    return () => {
+      isMounted = false;
+      if (unsubscribeFirestore) unsubscribeFirestore();
+    };
   }, [filters.category, filters.subcategory, filters.searchQuery]);
 
   const resetFilters = () => {
@@ -119,7 +127,8 @@ function ShopContent() {
   }, [filters]);
 
   const filteredProducts = useMemo(() => {
-    return productsList
+    const list = productsList.length > 0 ? productsList : INITIAL_PRODUCTS;
+    return list
       .filter((prod) => {
         if (filters.category && prod.category?.slug !== filters.category && prod.category?.name?.toLowerCase() !== filters.category.toLowerCase()) {
           return false;

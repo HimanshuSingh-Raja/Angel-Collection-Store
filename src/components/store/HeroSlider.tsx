@@ -11,7 +11,7 @@ import { getStorefrontBannersAction } from '@/actions/banner-admin';
 import { subscribeStorefrontBanners } from '@/lib/firebase/banners';
 
 export const HeroSlider: React.FC = () => {
-  const [banners, setBanners] = useState<Banner[]>(INITIAL_BANNERS);
+  const [banners, setBanners] = useState<Banner[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
 
   const touchStartXRef = useRef<number | null>(null);
@@ -20,40 +20,48 @@ export const HeroSlider: React.FC = () => {
   // Real-time Firestore onSnapshot listener with graceful offline fallback
   useEffect(() => {
     let unsubscribeFirestore: (() => void) | null = null;
+    let isMounted = true;
 
-    async function loadFallbackBanners() {
+    async function loadDatabaseBanners() {
       try {
         const actionBanners = await getStorefrontBannersAction();
-        if (actionBanners && actionBanners.length > 0) {
-          setBanners(actionBanners as any);
+        if (isMounted && Array.isArray(actionBanners)) {
+          setBanners(actionBanners as Banner[]);
         }
       } catch (e) {
-        // Fallback to initial
+        // Handle error
       }
     }
+
+    // Fetch database banners immediately on mount
+    loadDatabaseBanners();
 
     try {
       unsubscribeFirestore = subscribeStorefrontBanners(
         (liveActiveBanners) => {
-          if (liveActiveBanners && liveActiveBanners.length > 0) {
-            setBanners(liveActiveBanners);
+          if (isMounted && Array.isArray(liveActiveBanners)) {
+            if (liveActiveBanners.length > 0) {
+              setBanners(liveActiveBanners);
+            } else {
+              loadDatabaseBanners();
+            }
           }
         },
         (err) => {
-          console.warn('Firestore offline fallback:', err.message);
-          loadFallbackBanners();
+          if (isMounted) loadDatabaseBanners();
         }
       );
     } catch (err) {
-      console.warn('Firestore real-time subscription fallback to server action:', err);
+      if (isMounted) loadDatabaseBanners();
     }
 
-    loadFallbackBanners();
-
-    const handleFocus = () => loadFallbackBanners();
+    const handleFocus = () => {
+      if (isMounted) loadDatabaseBanners();
+    };
     window.addEventListener('focus', handleFocus);
 
     return () => {
+      isMounted = false;
       if (unsubscribeFirestore) unsubscribeFirestore();
       window.removeEventListener('focus', handleFocus);
     };
@@ -63,7 +71,13 @@ export const HeroSlider: React.FC = () => {
   const totalSlides = banners.length || 1;
 
   useEffect(() => {
-    if (totalSlides === 0) return;
+    if (currentSlide >= banners.length && banners.length > 0) {
+      setCurrentSlide(0);
+    }
+  }, [banners.length, currentSlide]);
+
+  useEffect(() => {
+    if (totalSlides <= 1) return;
     const timer = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % totalSlides);
     }, 5000);
@@ -75,6 +89,7 @@ export const HeroSlider: React.FC = () => {
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartXRef.current = e.touches[0].clientX;
+    touchEndXRef.current = null;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -96,7 +111,8 @@ export const HeroSlider: React.FC = () => {
     touchEndXRef.current = null;
   };
 
-  const activeBanner = banners[currentSlide % totalSlides] || INITIAL_BANNERS[0];
+  const activeBanner = banners.length > 0 ? banners[currentSlide % banners.length] : null;
+  const activeImageUrl = activeBanner?.imageUrl || '';
 
   // Category quick-nav pills
   const categoriesPills = [
@@ -150,7 +166,7 @@ export const HeroSlider: React.FC = () => {
   ];
 
   return (
-    <div className="relative z-1 w-full space-y-4 sm:space-y-6 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-3 sm:pt-6">
+    <div className="relative z-10 w-full space-y-4 sm:space-y-6 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-3 sm:pt-6">
       {/* 1. LUXURY MOBILE HERO BANNER */}
       <div
         onTouchStart={handleTouchStart}
@@ -168,15 +184,17 @@ export const HeroSlider: React.FC = () => {
             transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
             className="absolute inset-0 w-full h-full"
           >
-            <Image
-              src={activeBanner.imageUrl}
-              alt={activeBanner.title}
-              fill
-              priority
-              sizes="100vw"
-              className="w-full h-full object-cover object-center sm:object-[center_top]"
-              unoptimized
-            />
+            {activeImageUrl && (
+              <Image
+                src={activeImageUrl}
+                alt={activeBanner?.title || 'Hero Banner'}
+                fill
+                priority
+                sizes="100vw"
+                className="w-full h-full object-cover object-center sm:object-[center_top]"
+                unoptimized
+              />
+            )}
             {/* Soft Bottom Gradient Overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent z-10" />
           </motion.div>
@@ -186,7 +204,7 @@ export const HeroSlider: React.FC = () => {
         <div className="absolute bottom-8 left-4 right-4 sm:bottom-14 sm:left-10 z-20 max-w-xl space-y-2 sm:space-y-4">
           <div className="flex items-center gap-2">
             <span className="px-3 py-1 rounded-full bg-amber-500/20 backdrop-blur-md border border-amber-500/40 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.25em] text-amber-300 shadow-sm">
-              ✦ {activeBanner.category || 'HAUTE COUTURE 2026'}
+              ✦ {activeBanner?.category || 'HAUTE COUTURE 2026'}
             </span>
           </div>
 
@@ -200,10 +218,10 @@ export const HeroSlider: React.FC = () => {
               className="space-y-1"
             >
               <h1 className="font-serif text-2xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white leading-tight drop-shadow-md">
-                {activeBanner.title}
+                {activeBanner?.title || 'ANGEL SOVEREIGN COUTURE'}
               </h1>
               <p className="text-xs sm:text-sm text-neutral-200 font-light leading-relaxed line-clamp-2 max-w-md drop-shadow-sm">
-                {activeBanner.subtitle}
+                {activeBanner?.subtitle || 'Explore luxury fashion, Italian silk draping, and bespoke menswear.'}
               </p>
             </motion.div>
           </AnimatePresence>
@@ -211,7 +229,7 @@ export const HeroSlider: React.FC = () => {
           {/* Action Buttons */}
           <div className="flex items-center gap-2.5 pt-1">
             <Link
-              href={activeBanner.link || '/shop'}
+              href={activeBanner?.link || '/shop'}
               className="h-11 min-h-[44px] px-6 bg-amber-400 text-neutral-950 text-xs font-bold tracking-widest uppercase rounded-full hover:bg-white transition duration-200 flex items-center justify-center gap-1.5 shadow-lg shadow-amber-400/10 cursor-pointer"
             >
               <span>SHOP NOW</span>

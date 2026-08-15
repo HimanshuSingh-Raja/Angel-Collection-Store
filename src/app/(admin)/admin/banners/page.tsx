@@ -82,10 +82,8 @@ export default function AdminBannersPage() {
 
     try {
       unsubscribeFirestore = subscribeAdminBanners((liveBanners) => {
-        if (liveBanners && liveBanners.length > 0) {
+        if (Array.isArray(liveBanners)) {
           setBanners(liveBanners);
-        } else {
-          setBanners(INITIAL_BANNERS);
         }
         setLoading(false);
       });
@@ -97,11 +95,11 @@ export default function AdminBannersPage() {
     async function loadFallback() {
       try {
         const liveBanners = await getAdminBannersAction();
-        if (liveBanners && liveBanners.length > 0) {
+        if (Array.isArray(liveBanners)) {
           setBanners(liveBanners as any);
         }
       } catch (e) {
-        // Fallback to initial
+        // Handle error
       } finally {
         setLoading(false);
       }

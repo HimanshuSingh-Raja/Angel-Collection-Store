@@ -63,10 +63,6 @@ export async function searchProductsAction(params: SearchFilterParams) {
       reviewCount: 124,
     }));
 
-    if (rawProducts.length === 0) {
-      rawProducts = INITIAL_PRODUCTS as any;
-    }
-
     // 1. Strict Category & Subcategory Filter
     let filtered = rawProducts;
 
@@ -141,8 +137,8 @@ export async function searchProductsAction(params: SearchFilterParams) {
     console.error('Search action error:', error);
     return {
       success: true,
-      products: INITIAL_PRODUCTS as any,
-      total: INITIAL_PRODUCTS.length,
+      products: [],
+      total: 0,
       detectedCategory: 'All Collections',
       latencyMs: Date.now() - start,
     };

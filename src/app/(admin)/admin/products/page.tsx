@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Plus, Download, Upload, Search, Edit3, Trash2, Check, Loader2 } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
 import { getAdminProductsAction, deleteProductAction } from '@/actions/product-admin';
+import { subscribeAdminProducts, deleteFirestoreProduct } from '@/lib/firebase/products';
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<any[]>([]);
@@ -13,18 +14,35 @@ export default function AdminProductsPage() {
   const [imported, setImported] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+    let unsubscribe: (() => void) | null = null;
+
     async function loadProducts() {
       setLoading(true);
       try {
         const liveProducts = await getAdminProductsAction();
-        setProducts(liveProducts);
+        if (isMounted) setProducts(liveProducts);
       } catch (e) {
         console.error('Failed to load products from database:', e);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     }
     loadProducts();
+
+    try {
+      unsubscribe = subscribeAdminProducts((realtimeProducts) => {
+        if (isMounted && Array.isArray(realtimeProducts) && realtimeProducts.length > 0) {
+          setProducts(realtimeProducts);
+          setLoading(false);
+        }
+      });
+    } catch (e) {}
+
+    return () => {
+      isMounted = false;
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   const filtered = products.filter(
@@ -36,6 +54,7 @@ export default function AdminProductsPage() {
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this product from PostgreSQL DB?')) {
       setProducts((prev) => prev.filter((p) => p.id !== id));
+      deleteFirestoreProduct(id).catch(() => {});
       await deleteProductAction(id);
     }
   };

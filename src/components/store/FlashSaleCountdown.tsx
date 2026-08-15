@@ -4,10 +4,17 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Flame, ArrowRight, Timer } from 'lucide-react';
 import { ProductCard } from './ProductCard';
-import { INITIAL_PRODUCTS } from '@/lib/mock-data';
+import { Product } from '@/types';
+import { getStorefrontProductsAction } from '@/actions/product-store';
 
-export const FlashSaleCountdown: React.FC = () => {
+interface FlashSaleCountdownProps {
+  products?: Product[];
+}
+
+export const FlashSaleCountdown: React.FC<FlashSaleCountdownProps> = ({ products: initialProducts }) => {
   const [timeLeft, setTimeLeft] = useState({ hours: 14, minutes: 32, seconds: 45 });
+  const [productsList, setProductsList] = useState<Product[]>(initialProducts || []);
+  const [loading, setLoading] = useState(!initialProducts || initialProducts.length === 0);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -21,10 +28,38 @@ export const FlashSaleCountdown: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const flashSaleProducts = INITIAL_PRODUCTS.filter((p) => p.compareAtPrice && p.compareAtPrice > p.price);
+  useEffect(() => {
+    if (initialProducts && initialProducts.length > 0) {
+      setProductsList(initialProducts);
+      setLoading(false);
+      return;
+    }
+
+    async function loadLiveProducts() {
+      setLoading(true);
+      try {
+        const live = await getStorefrontProductsAction();
+        if (live && live.length > 0) {
+          setProductsList(live as Product[]);
+        }
+      } catch (e) {
+        console.error('Error fetching live flash sale products:', e);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadLiveProducts();
+  }, [initialProducts]);
+
+  const flashSaleProducts = productsList.filter(
+    (p) => p.compareAtPrice && p.compareAtPrice > p.price
+  );
+
+  const displayProducts = flashSaleProducts.length > 0 ? flashSaleProducts : productsList;
 
   return (
-    <section className="py-16 bg-neutral-950 text-white border-y border-neutral-800 relative overflow-hidden">
+    <section className="py-16 bg-neutral-950 text-white border-y border-neutral-800 relative overflow-hidden font-sans">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header with Live Countdown */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-12 border-b border-neutral-800 pb-8">
@@ -60,7 +95,7 @@ export const FlashSaleCountdown: React.FC = () => {
 
         {/* Product Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {flashSaleProducts.slice(0, 4).map((product) => (
+          {displayProducts.slice(0, 4).map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}
         </div>
@@ -69,7 +104,7 @@ export const FlashSaleCountdown: React.FC = () => {
         <div className="mt-12 text-center">
           <Link
             href="/shop?onSale=true"
-            className="inline-flex items-center gap-2 px-8 py-3.5 bg-amber-400 text-neutral-950 font-bold text-xs uppercase tracking-widest rounded-full hover:bg-amber-300 transition shadow-lg"
+            className="inline-flex items-center gap-2 px-8 py-3.5 bg-amber-400 text-neutral-950 font-bold text-xs uppercase tracking-widest rounded-full hover:bg-amber-300 transition shadow-lg cursor-pointer"
           >
             <span>VIEW ALL PRIVILEGE DEALS</span>
             <ArrowRight className="w-4 h-4" />

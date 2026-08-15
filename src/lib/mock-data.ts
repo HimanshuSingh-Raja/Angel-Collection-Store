@@ -78,7 +78,7 @@ export const INITIAL_BANNERS: Banner[] = [
   {
     id: 'banner-2',
     title: 'AURORA 18K FINE JEWELLERY COLLECTION',
-    subtitle: 'Hand-cut ethically sourced diamonds and celestial gold',
+    subtitle: 'Hand-cut ethically sourced diamonds and celestial gold pendants',
     imageUrl: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=1920&auto=format&fit=crop',
     mobileImageUrl: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=800&auto=format&fit=crop',
     link: '/shop?category=jewellery',
@@ -96,7 +96,29 @@ export const INITIAL_BANNERS: Banner[] = [
     category: 'HERO_SLIDER',
     position: 3,
     isActive: true,
-  }
+  },
+  {
+    id: 'banner-4',
+    title: 'TUSCAN LEATHER HANDBAG EDIT',
+    subtitle: 'Artisanal handcrafted calfskin totes & bespoke evening clutches',
+    imageUrl: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?q=80&w=1920&auto=format&fit=crop',
+    mobileImageUrl: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?q=80&w=800&auto=format&fit=crop',
+    link: '/shop?category=bags',
+    category: 'HERO_SLIDER',
+    position: 4,
+    isActive: true,
+  },
+  {
+    id: 'banner-5',
+    title: 'HERITAGE SILK & ZARDOZI SAREES',
+    subtitle: 'Exquisite hand-woven Banarasi & organza sarees with royal embroidery',
+    imageUrl: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?q=80&w=1920&auto=format&fit=crop',
+    mobileImageUrl: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?q=80&w=800&auto=format&fit=crop',
+    link: '/shop?category=women',
+    category: 'HERO_SLIDER',
+    position: 5,
+    isActive: true,
+  },
 ];
 
 export const INITIAL_PRODUCTS: Product[] = [

@@ -87,10 +87,10 @@ export default function SearchPage() {
             setDetectedCategoryName(res.detectedCategory);
           }
         } else {
-          setProducts(INITIAL_PRODUCTS as any);
+          setProducts([]);
         }
       } catch (err) {
-        setProducts(INITIAL_PRODUCTS as any);
+        setProducts([]);
       } finally {
         setLoading(false);
       }

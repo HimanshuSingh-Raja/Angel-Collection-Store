@@ -1,6 +1,57 @@
 'use server';
 
 import { db as prisma } from '@/lib/db';
+import { INITIAL_PRODUCTS } from '@/lib/mock-data';
+
+/**
+ * Seed initial products into PostgreSQL database if table is empty,
+ * making them real editable/deletable database records.
+ */
+async function seedProductsIfEmpty() {
+  try {
+    const count = await prisma.product.count();
+    if (count === 0 && INITIAL_PRODUCTS.length > 0) {
+      let cat = await prisma.category.findFirst();
+      if (!cat) {
+        cat = await prisma.category.create({
+          data: {
+            name: 'Haute Couture',
+            slug: 'haute-couture',
+            description: 'Luxury fashion collection',
+          },
+        });
+      }
+
+      for (const p of INITIAL_PRODUCTS) {
+        await prisma.product.create({
+          data: {
+            id: p.id,
+            title: p.title,
+            slug: p.slug || p.title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, ''),
+            sku: p.sku || `SKU-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+            description: p.description || p.title,
+            shortDescription: p.shortDescription || null,
+            price: p.price,
+            compareAtPrice: p.compareAtPrice || null,
+            stock: p.stock || 10,
+            status: 'PUBLISHED',
+            isFeatured: p.isFeatured ?? true,
+            isTrending: p.isTrending ?? true,
+            isNewArrival: p.isNewArrival ?? true,
+            categoryId: cat.id,
+            images: {
+              create: (p.images && p.images.length > 0)
+                ? p.images.map((img, i) => ({ url: img.url, isPrimary: i === 0, position: i }))
+                : [{ url: 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=800', isPrimary: true, position: 0 }],
+            },
+          },
+        }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn('Product seeding notice:', err);
+  }
+}
 
 export async function getStorefrontProductsAction(query?: {
   category?: string;
@@ -13,6 +64,8 @@ export async function getStorefrontProductsAction(query?: {
 }) {
   const startTime = Date.now();
   try {
+    await seedProductsIfEmpty();
+
     const categorySlug = query?.category?.toLowerCase().trim();
     const typeSlug = (query?.type || query?.subcategory)?.toLowerCase().trim();
 
@@ -84,6 +137,7 @@ export async function getStorefrontProductsAction(query?: {
         price: true,
         compareAtPrice: true,
         stock: true,
+        status: true,
         isFeatured: true,
         isNewArrival: true,
         isTrending: true,
@@ -118,6 +172,7 @@ export async function getStorefrontProductsAction(query?: {
       price: p.price,
       compareAtPrice: p.compareAtPrice || undefined,
       stock: p.stock,
+      status: p.status,
       category: p.category ? { id: p.category.id, name: p.category.name, slug: p.category.slug } : undefined,
       subcategory: p.subcategory ? { id: p.subcategory.id, name: p.subcategory.name, slug: p.subcategory.slug } : undefined,
       brand: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug } : undefined,
@@ -158,6 +213,7 @@ export async function getProductBySlugAction(slug: string) {
         compareAtPrice: true,
         stock: true,
         lowStockThreshold: true,
+        status: true,
         isFeatured: true,
         isNewArrival: true,
         isTrending: true,
@@ -195,6 +251,7 @@ export async function getProductBySlugAction(slug: string) {
       compareAtPrice: p.compareAtPrice || undefined,
       stock: p.stock,
       lowStockThreshold: p.lowStockThreshold || 5,
+      status: p.status,
       category: p.category ? { id: p.category.id, name: p.category.name, slug: p.category.slug } : undefined,
       subcategory: p.subcategory ? { id: p.subcategory.id, name: p.subcategory.name, slug: p.subcategory.slug } : undefined,
       brand: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug } : undefined,

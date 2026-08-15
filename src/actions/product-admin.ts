@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { db as prisma } from '@/lib/db';
 import { ProductStatus } from '@prisma/client';
+import { saveFirestoreProduct, deleteFirestoreProduct } from '@/lib/firebase/products';
 
 export interface CreateProductInput {
   title: string;
@@ -118,6 +119,22 @@ export async function createProductAction(data: CreateProductInput) {
       },
       include: { images: true, category: true, subcategory: true },
     });
+
+    saveFirestoreProduct({
+      id: product.id,
+      title: product.title,
+      slug: product.slug,
+      sku: product.sku,
+      price: product.price,
+      compareAtPrice: product.compareAtPrice,
+      stock: product.stock,
+      status: product.status,
+      isFeatured: product.isFeatured,
+      isTrending: product.isTrending,
+      isNewArrival: product.isNewArrival,
+      images: product.images.map((img) => ({ url: img.url, isPrimary: img.isPrimary })),
+      createdAt: product.createdAt.toISOString(),
+    }).catch(() => {});
 
     // Revalidate live storefront routes instantly
     revalidatePath('/');
@@ -248,6 +265,22 @@ export async function updateProductAction(data: UpdateProductInput) {
       include: { images: true, category: true },
     });
 
+    saveFirestoreProduct({
+      id: updated.id,
+      title: updated.title,
+      slug: updated.slug,
+      sku: updated.sku,
+      price: updated.price,
+      compareAtPrice: updated.compareAtPrice,
+      stock: updated.stock,
+      status: updated.status,
+      isFeatured: updated.isFeatured,
+      isTrending: updated.isTrending,
+      isNewArrival: updated.isNewArrival,
+      images: updated.images.map((img) => ({ url: img.url, isPrimary: img.isPrimary })),
+      updatedAt: updated.updatedAt.toISOString(),
+    }).catch(() => {});
+
     // Revalidate storefront cache
     revalidatePath('/');
     revalidatePath('/shop');
@@ -268,6 +301,12 @@ export async function updateProductStatusAction(productId: string, newStatus: 'P
       where: { id: productId },
       data: { status: newStatus as ProductStatus, updatedAt: new Date() },
     });
+
+    saveFirestoreProduct({
+      id: updated.id,
+      status: updated.status,
+      updatedAt: updated.updatedAt.toISOString(),
+    }).catch(() => {});
 
     revalidatePath('/');
     revalidatePath('/shop');
@@ -357,6 +396,8 @@ export async function updateProductStockAction(productId: string, newStock: numb
 
 export async function deleteProductAction(productId: string) {
   try {
+    deleteFirestoreProduct(productId).catch(() => {});
+
     await prisma.product.delete({
       where: { id: productId },
     });

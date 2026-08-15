@@ -1,26 +1,79 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Sparkles, ArrowRight, Star, Instagram, ShieldCheck, Award, Heart, CheckCircle2, Flame, Clock, Mail, Check } from 'lucide-react';
+import { Sparkles, ArrowRight, Flame, Mail, Check, Loader2 } from 'lucide-react';
 import { HeroSlider } from '@/components/store/HeroSlider';
-import { FlashSaleCountdown } from '@/components/store/FlashSaleCountdown';
 import { ProductCard } from '@/components/store/ProductCard';
 import { QuickViewModal } from '@/components/store/QuickViewModal';
-import { INITIAL_PRODUCTS, INITIAL_CATEGORIES, INITIAL_BRANDS, INITIAL_REVIEWS } from '@/lib/mock-data';
 import { Product } from '@/types';
+import { INITIAL_PRODUCTS } from '@/lib/mock-data';
+import { getStorefrontProductsAction } from '@/actions/product-store';
+import { subscribeStorefrontProducts } from '@/lib/firebase/products';
 
 export default function HomePage() {
+  const [productsList, setProductsList] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
 
-  const newArrivals = INITIAL_PRODUCTS.filter((p) => p.isNewArrival);
-  const bestSellers = INITIAL_PRODUCTS.filter((p) => p.isBestSeller);
-  const trending = INITIAL_PRODUCTS.filter((p) => p.isTrending);
-  const flashSaleProducts = INITIAL_PRODUCTS.filter((p) => p.compareAtPrice && p.compareAtPrice > p.price);
-  const jewellery = INITIAL_PRODUCTS.filter((p) => p.categoryId === 'cat-jewellery');
-  const bags = INITIAL_PRODUCTS.filter((p) => p.categoryId === 'cat-bags');
+  useEffect(() => {
+    let isMounted = true;
+    let unsubscribeFirestore: (() => void) | null = null;
+
+    async function loadProducts() {
+      setLoading(true);
+      try {
+        const liveProducts = await getStorefrontProductsAction();
+        if (isMounted && Array.isArray(liveProducts)) {
+          setProductsList(liveProducts as Product[]);
+        }
+      } catch (e) {
+        console.error('Failed to load homepage products:', e);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    loadProducts();
+
+    try {
+      unsubscribeFirestore = subscribeStorefrontProducts((realtimeProducts) => {
+        if (isMounted && Array.isArray(realtimeProducts) && realtimeProducts.length > 0) {
+          setProductsList(realtimeProducts);
+          setLoading(false);
+        }
+      });
+    } catch (e) {
+      console.warn('Real-time products subscription notice:', e);
+    }
+
+    const handleFocus = () => {
+      if (isMounted) loadProducts();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      isMounted = false;
+      if (unsubscribeFirestore) unsubscribeFirestore();
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
+  // Trending Section: ONLY use real uploaded products from database (no demo data)
+  const trendingMatches = productsList.filter((p) => p.isTrending);
+  const displayTrending = productsList.length > 0
+    ? (trendingMatches.length > 0 ? trendingMatches : productsList)
+    : [];
+
+  const activeProducts = productsList.length > 0 ? productsList : INITIAL_PRODUCTS;
+
+  const newArrivals = activeProducts.filter((p) => p.isNewArrival);
+  const displayNewArrivals = newArrivals.length > 0 ? newArrivals : activeProducts;
+
+  const flashSaleProducts = activeProducts.filter((p) => p.compareAtPrice && p.compareAtPrice > p.price);
+  const displayFlashSale = flashSaleProducts.length > 0 ? flashSaleProducts : activeProducts;
 
   const handleNewsletterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,6 +91,13 @@ export default function HomePage() {
     { name: 'Watches', image: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=300&q=80', href: '/shop?category=watches' },
     { name: 'Beauty', image: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&q=80', href: '/shop?category=beauty' },
     { name: 'Accessories', image: 'https://images.unsplash.com/photo-1611591475179-42cd345f092e?w=300&q=80', href: '/shop?category=accessories' },
+  ];
+
+  const brandList = [
+    { id: 'brand-angel', name: 'Angel Privé', slug: 'angel-prive' },
+    { id: 'brand-zara', name: 'Zara Studio', slug: 'zara-studio' },
+    { id: 'brand-maison', name: 'Maison Luxe', slug: 'maison-luxe' },
+    { id: 'brand-aurora', name: 'Aurora Fine Jewels', slug: 'aurora-jewels' },
   ];
 
   return (
@@ -59,7 +119,7 @@ export default function HomePage() {
             <Link
               key={cat.name}
               href={cat.href}
-              className="flex flex-col items-center group shrink-0"
+              className="flex flex-col items-center group shrink-0 cursor-pointer"
             >
               <div className="w-14 h-14 sm:w-22 sm:h-22 rounded-full p-0.5 sm:p-1 border-2 border-neutral-200 group-hover:border-amber-600 transition-all duration-300 shadow-xs group-hover:shadow-md bg-white">
                 <img
@@ -100,20 +160,27 @@ export default function HomePage() {
           </div>
 
           {/* Horizontal Product Scroll */}
-          <div className="flex gap-3 sm:gap-6 overflow-x-auto no-scrollbar pb-1">
-            {flashSaleProducts.map((prod) => (
-              <div key={prod.id} className="w-[180px] sm:w-[260px] shrink-0">
-                <ProductCard
-                  product={prod}
-                  onQuickView={(p) => setQuickViewProduct(p)}
-                />
-              </div>
-            ))}
-          </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-neutral-400 text-xs gap-2">
+              <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
+              <span>Loading live deals from database...</span>
+            </div>
+          ) : (
+            <div className="flex gap-3 sm:gap-6 overflow-x-auto no-scrollbar pb-1">
+              {displayFlashSale.slice(0, 6).map((prod) => (
+                <div key={prod.id} className="w-[180px] sm:w-[260px] shrink-0">
+                  <ProductCard
+                    product={prod}
+                    onQuickView={(p) => setQuickViewProduct(p)}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
-      {/* SECTION 4: NEW ARRIVALS (2 COLUMNS MOBILE) */}
+      {/* SECTION 4: NEW ARRIVALS */}
       <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-4 sm:mb-8 pb-3 sm:pb-4 border-b border-neutral-200">
           <div>
@@ -129,15 +196,22 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-          {newArrivals.slice(0, 4).map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onQuickView={(p) => setQuickViewProduct(p)}
-            />
-          ))}
-        </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-12 text-neutral-400 text-xs gap-2">
+            <Loader2 className="w-5 h-5 animate-spin text-amber-700" />
+            <span>Fetching database products...</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+            {displayNewArrivals.slice(0, 4).map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                onQuickView={(p) => setQuickViewProduct(p)}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* SECTION 5: LUXURY COLLECTIONS */}
@@ -203,7 +277,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* SECTION 6: TRENDING PRODUCTS (2 COLUMNS MOBILE) */}
+      {/* SECTION 6: TRENDING PRODUCTS */}
       <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-4 sm:mb-8 pb-3 sm:pb-4 border-b border-neutral-200">
           <div>
@@ -219,15 +293,26 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-          {trending.slice(0, 4).map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onQuickView={(p) => setQuickViewProduct(p)}
-            />
-          ))}
-        </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-12 text-neutral-400 text-xs gap-2">
+            <Loader2 className="w-5 h-5 animate-spin text-amber-700" />
+            <span>Fetching trending items...</span>
+          </div>
+        ) : displayTrending.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+            {displayTrending.slice(0, 4).map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                onQuickView={(p) => setQuickViewProduct(p)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="p-8 text-center bg-neutral-50 rounded-2xl border border-neutral-200/60 text-xs text-neutral-500">
+            No uploaded products found in database. Upload products in Admin Panel to show trending items.
+          </div>
+        )}
       </section>
 
       {/* SECTION 7: SHOP BY BRAND */}
@@ -237,11 +322,11 @@ export default function HomePage() {
             SHOP BY DESIGNER HOUSES
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-6 text-center">
-            {INITIAL_BRANDS.map((b) => (
+            {brandList.map((b) => (
               <Link
                 key={b.id}
                 href={`/shop?brand=${b.slug}`}
-                className="p-4 sm:p-6 bg-white rounded-xl sm:rounded-2xl border border-neutral-200/80 shadow-xs font-serif text-sm sm:text-lg font-bold text-neutral-900 tracking-wider hover:border-amber-700 transition"
+                className="p-4 sm:p-6 bg-white rounded-xl sm:rounded-2xl border border-neutral-200/80 shadow-xs font-serif text-sm sm:text-lg font-bold text-neutral-900 tracking-wider hover:border-amber-700 transition cursor-pointer"
               >
                 {b.name}
               </Link>

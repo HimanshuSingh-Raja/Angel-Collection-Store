@@ -1,21 +1,49 @@
 'use client';
 
-import React, { use, useState } from 'react';
+import React, { use, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Clock, User, Calendar, MessageSquare, Send, CheckCircle2 } from 'lucide-react';
-import { INITIAL_BLOGS } from '@/lib/mock-data';
+import { ArrowLeft, Clock, User, MessageSquare, Send, CheckCircle2, Loader2 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import { getBlogBySlugAction } from '@/actions/blog-admin';
 
 export default function BlogDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = use(params);
-  const blog = INITIAL_BLOGS.find((b) => b.slug === resolvedParams.slug) || INITIAL_BLOGS[0];
+  const slug = resolvedParams.slug;
+
+  const [blog, setBlog] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const [commentName, setCommentName] = useState('');
   const [commentText, setCommentText] = useState('');
-  const [commentsList, setCommentsList] = useState([
+  const [commentsList, setCommentsList] = useState<Array<{ id: string; userName: string; comment: string; date: string }>>([
     { id: '1', userName: 'Victoria Sterling', comment: 'Insightful guide! Understanding Mulberry silk drape helped me pick the right gown.', date: 'July 22, 2026' },
   ]);
   const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    async function loadBlog() {
+      setLoading(true);
+      try {
+        const fetchedBlog = await getBlogBySlugAction(slug);
+        setBlog(fetchedBlog);
+        if (fetchedBlog && fetchedBlog.comments && fetchedBlog.comments.length > 0) {
+          setCommentsList(
+            fetchedBlog.comments.map((c: any) => ({
+              id: c.id,
+              userName: c.userName,
+              comment: c.comment,
+              date: formatDate(c.createdAt),
+            }))
+          );
+        }
+      } catch (err) {
+        console.error('Failed to load blog by slug:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadBlog();
+  }, [slug]);
 
   const handlePostComment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,8 +60,29 @@ export default function BlogDetailPage({ params }: { params: Promise<{ slug: str
     setTimeout(() => setSubmitted(false), 3000);
   };
 
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 text-neutral-500 text-xs gap-3 font-sans">
+        <Loader2 className="w-6 h-6 animate-spin text-amber-700" />
+        <span>Loading article...</span>
+      </div>
+    );
+  }
+
+  if (!blog) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-4 font-sans">
+        <h2 className="font-serif text-2xl font-bold text-neutral-900">Article Not Found</h2>
+        <p className="text-xs text-neutral-500">The requested blog post could not be located.</p>
+        <Link href="/blog" className="inline-block px-5 py-2.5 bg-neutral-950 text-white rounded-xl text-xs font-bold uppercase">
+          Back to Journal
+        </Link>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8 font-sans">
       <Link href="/blog" className="text-xs font-bold text-neutral-600 hover:text-black flex items-center gap-1.5">
         <ArrowLeft className="w-4 h-4" /> Back to Journal
       </Link>
@@ -46,10 +95,12 @@ export default function BlogDetailPage({ params }: { params: Promise<{ slug: str
 
         <div className="flex items-center space-x-6 text-xs text-neutral-500 pt-2 border-b border-neutral-200 pb-4">
           <div className="flex items-center space-x-2">
-            <img src={blog.authorAvatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+            {blog.authorAvatar && <img src={blog.authorAvatar} alt="" className="w-8 h-8 rounded-full object-cover" />}
             <span className="font-bold text-neutral-900">{blog.authorName}</span>
           </div>
-          <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-amber-700" /> {blog.readTime}</span>
+          <span className="flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5 text-amber-700" /> {blog.readTime}
+          </span>
           <span>{formatDate(blog.publishedAt)}</span>
         </div>
       </div>
@@ -59,7 +110,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ slug: str
       </div>
 
       <div className="prose max-w-none text-xs sm:text-sm text-neutral-700 leading-relaxed font-light space-y-4">
-        {blog.content.split('\n\n').map((paragraph, i) => (
+        {(blog.content || blog.excerpt || '').split('\n\n').map((paragraph: string, i: number) => (
           <p key={i}>{paragraph}</p>
         ))}
       </div>
@@ -115,7 +166,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ slug: str
 
           <button
             type="submit"
-            className="px-6 py-3 bg-neutral-950 text-white rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-amber-700 transition flex items-center gap-2"
+            className="px-6 py-3 bg-neutral-950 text-white rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-amber-700 transition flex items-center gap-2 cursor-pointer"
           >
             <Send className="w-4 h-4 text-amber-300" />
             <span>Submit Comment</span>

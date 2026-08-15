@@ -82,15 +82,6 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
           return;
         }
 
-        const mockMatch = INITIAL_PRODUCTS.find((p) => p.slug === slug);
-        if (mockMatch) {
-          setProduct(mockMatch);
-          setSelectedSize(mockMatch.sizes?.[0] || 'S');
-          setSelectedColor(mockMatch.colors?.[0] || 'Black');
-          setLoading(false);
-          return;
-        }
-
         setNotFoundState(true);
       } catch (err) {
         console.error('Error loading product by slug:', err);
@@ -118,7 +109,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
 
   const inWishlist = isInWishlist(product.id);
   const discount = calculateDiscountPercentage(product.price, product.compareAtPrice);
-  const relatedProducts = INITIAL_PRODUCTS.filter((p) => p.id !== product.id).slice(0, 4);
+  const relatedProducts: any[] = [];
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);

@@ -20,19 +20,13 @@ export function subscribeAdminBanners(
   return subscribeCollectionData<Banner>(
     BANNERS_COLLECTION,
     (liveBanners) => {
-      if (!liveBanners || liveBanners.length === 0) {
-        callback(INITIAL_BANNERS);
-      } else {
-        const sorted = [...liveBanners].sort((a, b) => (a.position || 0) - (b.position || 0));
-        callback(sorted);
-      }
+      const sorted = [...(liveBanners || [])].sort((a, b) => (a.position || 0) - (b.position || 0));
+      callback(sorted);
     },
     (err) => {
-      console.warn('Firestore admin banner subscription fallback:', err.message);
-      callback(INITIAL_BANNERS);
+      console.warn('Firestore admin banner subscription notice:', err.message);
       if (onError) onError(err);
-    },
-    orderBy('position', 'asc')
+    }
   );
 }
 
@@ -46,23 +40,16 @@ export function subscribeStorefrontBanners(
   return subscribeCollectionData<Banner>(
     BANNERS_COLLECTION,
     (liveBanners) => {
-      if (!liveBanners || liveBanners.length === 0) {
-        callback(INITIAL_BANNERS);
-      } else {
-        const activeBanners = liveBanners
-          .filter((b) => b.isActive !== false)
-          .sort((a, b) => (a.position || 0) - (b.position || 0));
+      const activeBanners = [...(liveBanners || [])]
+        .filter((b) => b.isActive !== false)
+        .sort((a, b) => (a.position || 0) - (b.position || 0));
 
-        callback(activeBanners.length > 0 ? activeBanners : INITIAL_BANNERS);
-      }
+      callback(activeBanners);
     },
     (err) => {
-      console.warn('Firestore storefront banner subscription fallback:', err.message);
-      callback(INITIAL_BANNERS);
+      console.warn('Firestore storefront banner subscription notice:', err.message);
       if (onError) onError(err);
-    },
-    where('isActive', '==', true),
-    orderBy('position', 'asc')
+    }
   );
 }
 
