@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Sparkles, ArrowRight, Flame, Mail, Check, Loader2 } from 'lucide-react';
 import { HeroSlider } from '@/components/store/HeroSlider';
 import { ProductCard } from '@/components/store/ProductCard';
+import { ProductSkeletonGrid } from '@/components/store/ProductSkeletonCard';
 import { QuickViewModal } from '@/components/store/QuickViewModal';
 import { Product } from '@/types';
 import { INITIAL_PRODUCTS } from '@/lib/mock-data';
@@ -49,15 +50,9 @@ export default function HomePage() {
       console.warn('Real-time products subscription notice:', e);
     }
 
-    const handleFocus = () => {
-      if (isMounted) loadProducts();
-    };
-    window.addEventListener('focus', handleFocus);
-
     return () => {
       isMounted = false;
       if (unsubscribeFirestore) unsubscribeFirestore();
-      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
@@ -294,10 +289,7 @@ export default function HomePage() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-12 text-neutral-400 text-xs gap-2">
-            <Loader2 className="w-5 h-5 animate-spin text-amber-700" />
-            <span>Fetching trending items...</span>
-          </div>
+          <ProductSkeletonGrid count={4} />
         ) : displayTrending.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
             {displayTrending.slice(0, 4).map((product) => (

@@ -1,6 +1,6 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { db as prisma } from '@/lib/db';
 import { ProductStatus } from '@prisma/client';
 import { saveFirestoreProduct, deleteFirestoreProduct } from '@/lib/firebase/products';
@@ -137,6 +137,7 @@ export async function createProductAction(data: CreateProductInput) {
     }).catch(() => {});
 
     // Revalidate live storefront routes instantly
+    (revalidateTag as any)('storefront-products');
     revalidatePath('/');
     revalidatePath('/shop');
     revalidatePath(`/product/${generatedSlug}`);
@@ -282,6 +283,7 @@ export async function updateProductAction(data: UpdateProductInput) {
     }).catch(() => {});
 
     // Revalidate storefront cache
+    (revalidateTag as any)('storefront-products');
     revalidatePath('/');
     revalidatePath('/shop');
     revalidatePath(`/product/${generatedSlug}`);
@@ -402,6 +404,7 @@ export async function deleteProductAction(productId: string) {
       where: { id: productId },
     });
 
+    (revalidateTag as any)('storefront-products');
     revalidatePath('/');
     revalidatePath('/shop');
     revalidatePath('/admin/products');
